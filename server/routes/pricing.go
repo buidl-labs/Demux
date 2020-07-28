@@ -1,16 +1,21 @@
 package routes
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
 // PriceEstimateHandler handles the /pricing endpoint
 func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Hello, world!\n%v\n", vars)
-	// fmt.Fprintf(w, "Category: %v\n", vars["category"])
+	data := map[string]interface{}{
+		"Pricing": "",
+	}
+	json, err := json.MarshalIndent(data, "", "    ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Fprintln(w, string(json))
 }
