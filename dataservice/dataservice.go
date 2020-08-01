@@ -91,7 +91,18 @@ func CreateTranscodingDeal(x model.TranscodingDeal) {
 }
 
 // CreateStorageDeal creates a new storage deal.
-func CreateStorageDeal(x model.StorageDeal) {}
+func CreateStorageDeal(x model.StorageDeal) {
+	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Errorln("Error in inserting StorageDeal", x.CID)
+		log.Errorln(err.Error())
+	}
+	_, err = statement.Exec(x.CID, x.Name, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
+	if err != nil {
+		log.Errorln("Error in inserting StorageDeal", x.CID)
+		log.Errorln(err.Error())
+	}
+}
 
 // CreateAsset creates a new asset.
 func CreateAsset(x model.Asset) {
