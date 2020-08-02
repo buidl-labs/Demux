@@ -19,6 +19,7 @@ type TranscodingDeal struct {
 type StorageDeal struct {
 	CID           string  `json:"CID"`
 	Name          string  `json:"Name"`
+	AssetID       string  `json:"AssetID"`
 	Miner         string  `json:"Miner"`
 	StorageCost   float64 `json:"Cost"`
 	Expiry        uint32  `json:"Expiry"`

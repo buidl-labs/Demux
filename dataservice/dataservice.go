@@ -41,6 +41,7 @@ func InitDB() {
 		CREATE TABLE IF NOT EXISTS StorageDeal (
 			CID           TEXT PRIMARY KEY,
 			Name          TEXT,
+			AssetID       TEXT,
 			Miner         TEXT,
 			StorageCost   FLOAT,
 			Expiry        UNSIGNED BIG INT,
@@ -92,16 +93,32 @@ func CreateTranscodingDeal(x model.TranscodingDeal) {
 
 // CreateStorageDeal creates a new storage deal.
 func CreateStorageDeal(x model.StorageDeal) {
-	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?)")
+	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, AssetID, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		log.Errorln("Error in inserting StorageDeal", x.CID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(x.CID, x.Name, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
+	_, err = statement.Exec(x.CID, x.Name, x.AssetID, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
 	if err != nil {
 		log.Errorln("Error in inserting StorageDeal", x.CID)
 		log.Errorln(err.Error())
 	}
+}
+
+// GetCIDForAsset returns the final stream CID for the given asset.
+func GetCIDForAsset(assetID string) string {
+	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
+	if err != nil {
+		log.Errorln("Error in getting CID for asset", assetID)
+		log.Errorln(err.Error())
+	}
+	data := []model.StorageDeal{}
+	x := model.StorageDeal{}
+	for rows.Next() {
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
+		data = append(data, x)
+	}
+	return data[0].CID
 }
 
 // CreateAsset creates a new asset.

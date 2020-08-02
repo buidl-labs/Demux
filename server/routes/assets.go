@@ -207,6 +207,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			dataservice.CreateStorageDeal(model.StorageDeal{
 				CID:           m3u8cidStr,
 				Name:          m3u8fname,
+				AssetID:       id.String(),
 				StorageCost:   5.0,        // fake cost
 				Expiry:        1609459200, // fake timestamp
 				TranscodingID: transcodingIDStr,
@@ -235,9 +236,13 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 	if dataservice.IfAssetExists(vars["asset_id"]) {
 		assetStatus := dataservice.GetAssetStatusIfExists(vars["asset_id"])
 		w.WriteHeader(http.StatusOK)
-		data := map[string]interface{}{
-			"AssetID":     vars["asset_id"],
-			"AssetStatus": assetStatus,
+
+		var data = make(map[string]interface{})
+		data["AssetID"] = vars["asset_id"]
+		data["AssetStatus"] = assetStatus
+
+		if assetStatus == 3 {
+			data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
 		}
 		json, err := json.MarshalIndent(data, "", "    ")
 		if err != nil {
