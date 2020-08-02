@@ -200,12 +200,16 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				fmt.Println(err)
 				return
 			}
+
+			m3u8cidStr := fmt.Sprintf("%s", m3u8cid)
+			transcodingIDStr := fmt.Sprintf("%s", transcodingID)
+
 			dataservice.CreateStorageDeal(model.StorageDeal{
-				CID:           fmt.Sprintf("%s", m3u8cid),
+				CID:           m3u8cidStr,
 				Name:          m3u8fname,
-				StorageCost:   0,
-				Expiry:        0,
-				TranscodingID: fmt.Sprintf("%s", transcodingID),
+				StorageCost:   5.0,        // fake cost
+				Expiry:        1609459200, // fake timestamp
+				TranscodingID: transcodingIDStr,
 			})
 
 			// set AssetStatus to 3 (completed storage process)
