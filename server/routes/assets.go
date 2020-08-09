@@ -20,11 +20,10 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/ipfs/go-cid"
-	"github.com/multiformats/go-multiaddr"
 )
 
 var (
-	lotusAddr = multiaddr.StringCast("/ip4/0.0.0.0/tcp/5002")
+	powergateAddr = "127.0.0.1:5002"
 )
 
 // AssetsHandler handles the asset uploads
@@ -80,12 +79,12 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 		io.Copy(f, clientFile)
 
 		setup := util.PowergateSetup{
-			LotusAddr:    lotusAddr,
-			MinerAddr:    "t01000", // TODO: select miner by looking at Asks
-			SampleSize:   700,
-			MaxParallel:  1,
-			TotalSamples: 1,
-			RandSeed:     22,
+			PowergateAddr: powergateAddr,
+			MinerAddr:     "t01000", // TODO: select miner by looking at Asks
+			SampleSize:    700,
+			MaxParallel:   1,
+			TotalSamples:  1,
+			RandSeed:      22,
 		}
 
 		go func() {
@@ -436,7 +435,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				CID720p:       m3u8CidMap["./assets/"+id.String()+"/720p/myvid.m3u8"],
 				CID360p:       m3u8CidMap["./assets/"+id.String()+"/360p/myvid.m3u8"],
 				AssetID:       id.String(),
-				Miner:         "t01000",   //fake miner
+				Miner:         "t01000",   // fake miner
 				StorageCost:   5.0,        // fake cost
 				Expiry:        1609459200, // fake timestamp
 				TranscodingID: transcodingIDStr,
