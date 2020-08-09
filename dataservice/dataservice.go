@@ -2,6 +2,7 @@ package dataservice
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/buidl-labs/Demux/model"
 
@@ -39,8 +40,10 @@ func InitDB() {
 
 	statement, err = database.Prepare(`
 		CREATE TABLE IF NOT EXISTS StorageDeal (
-			CID           TEXT PRIMARY KEY,
-			Name          TEXT,
+			DealID        TEXT PRIMARY KEY,
+			CID1080p      TEXT,
+			CID720p       TEXT,
+			CID360p       TEXT,
 			AssetID       TEXT,
 			Miner         TEXT,
 			StorageCost   FLOAT,
@@ -93,32 +96,39 @@ func CreateTranscodingDeal(x model.TranscodingDeal) {
 
 // CreateStorageDeal creates a new storage deal.
 func CreateStorageDeal(x model.StorageDeal) {
-	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, AssetID, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (DealID, CID1080p, CID720p, CID360p, AssetID, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
-		log.Errorln("Error in inserting StorageDeal", x.CID)
+		log.Errorln("Error in inserting StorageDeal", x.DealID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(x.CID, x.Name, x.AssetID, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
+	_, err = statement.Exec(x.DealID, x.CID1080p, x.CID720p, x.CID360p, x.AssetID, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
 	if err != nil {
-		log.Errorln("Error in inserting StorageDeal", x.CID)
+		log.Errorln("Error in inserting StorageDeal", x.DealID)
 		log.Errorln(err.Error())
 	}
 }
 
-// GetCIDForAsset returns the final stream CID for the given asset.
-func GetCIDForAsset(assetID string) string {
+// GetDealForAsset returns the storage deal for the given asset.
+func GetDealForAsset(assetID string) (model.StorageDeal, error) {
 	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
 	if err != nil {
-		log.Errorln("Error in getting CID for asset", assetID)
+		log.Errorln("Error in getting Deal for asset", assetID)
 		log.Errorln(err.Error())
 	}
 	data := []model.StorageDeal{}
 	x := model.StorageDeal{}
+	dummydata := model.StorageDeal{
+		DealID: "0",
+	}
 	for rows.Next() {
-		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
+		rows.Scan(&x.DealID, &x.CID1080p, &x.CID720p, &x.CID360p, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
 		data = append(data, x)
 	}
-	return data[0].CID
+	fmt.Println("getdeal", data)
+	if len(data) == 0 {
+		return dummydata, fmt.Errorf("No storage deal made yet")
+	}
+	return data[0], nil
 }
 
 // CreateAsset creates a new asset.
