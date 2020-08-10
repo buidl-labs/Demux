@@ -7,11 +7,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/model"
@@ -100,49 +101,153 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			// cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
 			// stdout1, err := cmd1.Output()
 
-			// if err != nil {
-			// 	fmt.Println("Some issue with transcoding")
-			// 	log.Println(err)
-			// 	return
-			// }
-			// _ = stdout1
+			cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
+			stdout1, err := cmd1.Output()
+			cmd2 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:720", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random720p.mp4")
+			stdout2, err := cmd2.Output()
+			cmd3 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:360", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random360p.mp4")
+			stdout3, err := cmd3.Output()
+
+			if err != nil {
+				fmt.Println("Some issue with transcoding")
+				log.Println(err)
+				return
+			}
+			_ = stdout1
+			_ = stdout2
+			_ = stdout3
+
+			stdout, err := exec.Command("ffprobe", "-i", demuxFileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			duration, e := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
+			if e != nil {
+				log.Println(e)
+				return
+			}
+
+			// Fetch orchestrator stats from livepeer pricing tool:
+			// GET https://livepeer-pricing-tool.com/orchestratorStats
+
+			orchestratorStats := "https://livepeer-pricing-tool.com/orchestratorStats"
+
+			resp, err := http.Get(orchestratorStats)
+
+			if err != nil {
+				log.Println(err)
+			}
+
+			defer resp.Body.Close()
+
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Println(err)
+			}
+
+			orchStats, err := util.GetOrchestratorStats([]byte(body))
+
+			weightSum := big.NewInt(0)
+			productSum := big.NewFloat(0)
+
+			for _, i := range orchStats {
+				stake := new(big.Float).SetInt(i.DelegatedStake)
+				ppp := new(big.Float).SetFloat64(i.PricePerPixel)
+				product := stake.Mul(stake, ppp)
+
+				weightSum.Add(weightSum, i.DelegatedStake)
+				productSum.Add(productSum, product)
+			}
+
+			// Calculate weighted average price per pixel (weighted by Delegated Stake)
+
+			// weighted pricePerPixel
+			pricePerPixel := new(big.Float).Quo(productSum, new(big.Float).SetInt(weightSum))
+
+			pixels := util.GetTotalPixels(int(duration))
+
+			// Calculate livepeer price for uploaded video
+
+			livepeerPrice := new(big.Float).SetInt(big.NewInt(int64(1)))
+			livepeerPrice = livepeerPrice.Mul(new(big.Float).SetInt(big.NewInt(int64(pixels))), pricePerPixel)
+
+			fmt.Println("livepeerprice", livepeerPrice)
+			transcodingCostWEI := livepeerPrice.String()
+			// transcodingCostWEI := fmt.Sprintf("%s", livepeerPrice)
+			fmt.Println("transcodingCostWEI", transcodingCostWEI)
 
 			transcodingID := guuid.New()
 			fmt.Printf("tidd: %s", transcodingID)
 			dataservice.CreateTranscodingDeal(model.TranscodingDeal{
 				TranscodingID:   transcodingID.String(),
-				TranscodingCost: 31.5,
+				TranscodingCost: transcodingCostWEI,
 				Directory:       id.String(),
 				StorageStatus:   false,
 			})
 
-			fmt.Println("./assets/" + id.String() + "/" + demuxFileName)
-			cmd := exec.Command(
-				"ffmpeg", "-i", demuxFileName,
-				"-profile:v", "baseline", "-level", "3.0", "-start_number", "0",
-				"-hls_time", "10", "-hls_list_size", "0", "-f", "hls",
-				"./assets/"+id.String()+"/myvid.m3u8")
-			stdout, err := cmd.Output()
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			_ = stdout
-
-			files, err := ioutil.ReadDir("./assets/" + id.String())
+			allfiles, err := ioutil.ReadDir("./assets/" + id.String())
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			var segments []string
-			fmt.Println("files are:")
-			for _, f := range files {
+			mkdir1080p := exec.Command("mkdir", "./assets/"+id.String()+"/1080p")
+			mkdir720p := exec.Command("mkdir", "./assets/"+id.String()+"/720p")
+			mkdir360p := exec.Command("mkdir", "./assets/"+id.String()+"/360p")
+			mkdir1080p.Output()
+			mkdir720p.Output()
+			mkdir360p.Output()
+
+			for _, f := range allfiles {
 				fname := f.Name()
-				if strings.Split(fname, ".")[1] == "ts" {
-					fmt.Println("./assets/" + id.String() + "/" + fname)
-					segments = append(segments, "./assets/"+id.String()+"/"+fname)
+				fmt.Println("fname", fname)
+				nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
+				name := strings.Split(nm, ".")[0]
+				fmt.Println("name", name)
+				if len(name) > 5 {
+					if name[len(name)-5:] == "1080p" {
+						// 1080p
+						_, err := util.CreateSegments(fname, "1080p", id)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					} else if name[len(name)-4:] == "720p" {
+						// 720p
+						_, err := util.CreateSegments(fname, "720p", id)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					} else if name[len(name)-4:] == "360p" {
+						// 360p
+						_, err := util.CreateSegments(fname, "360p", id)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					}
+				} else if len(name) > 4 {
+					if name[len(name)-4:] == "720p" {
+						// 720p
+						_, err := util.CreateSegments(fname, "720p", id)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					} else if name[len(name)-4:] == "360p" {
+						// 360p
+						_, err := util.CreateSegments(fname, "360p", id)
+						if err != nil {
+							log.Println(err)
+							return
+						}
+					}
 				}
 			}
+
+			// // Janitor: delete original mp4 file
+			// exec.Command("rm", "-rf", demuxFileName)
 
 			// set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
@@ -153,65 +258,27 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			var currcid cid.Cid
 			var currfname string
-			var fileCidMap = make(map[string]string)
-
-			var wg sync.WaitGroup
-			wg.Add(len(segments))
-
-			for _, segment := range segments {
-				go func(segment string) {
-					currcid, currfname, err = util.RunPow(ctx, setup, segment)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					fileCidMap[currfname] = fmt.Sprintf("%s", currcid)
-
-					wg.Done()
-				}(segment)
-			}
-
-			wg.Wait()
-
-			lines, err := util.ReadLines("./assets/" + id.String() + "/myvid.m3u8")
+			currcid, currfname, minername, storageprice, expiry, err := util.RunPow(ctx, setup, "./assets/"+id.String())
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
-			var IpfsHost = "http://0.0.0.0:8080/ipfs/"
-			for i, line := range lines {
-				fmt.Printf("line %d: %s\n", i, line)
-				if strings.HasPrefix(line, "myvid") {
-					if strings.Split(line, ".")[1] == "ts" {
-						fmt.Println("this", fileCidMap["./assets/"+id.String()+"/"+line])
-						lines[i] = IpfsHost + fileCidMap["./assets/"+id.String()+"/"+line]
-					}
-				}
-			}
-			fmt.Println("now:", lines)
+			fmt.Println("currcid", currcid, "currfname", currfname)
 
-			if err := util.WriteLines(lines, "./assets/"+id.String()+"/myvid.m3u8"); err != nil {
-				log.Fatalf("writeLines: %s", err)
-				return
-			}
-
-			m3u8cid, m3u8fname, err := util.RunPow(ctx, setup, "./assets/"+id.String()+"/myvid.m3u8")
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			m3u8cidStr := fmt.Sprintf("%s", m3u8cid)
 			transcodingIDStr := fmt.Sprintf("%s", transcodingID)
+			currcidStr := fmt.Sprintf("%s", currcid)
 
 			dataservice.CreateStorageDeal(model.StorageDeal{
-				CID:           m3u8cidStr,
-				Name:          m3u8fname,
+				CID:           currcidStr,
+				Name:          currfname,
 				AssetID:       id.String(),
-				StorageCost:   5.0,        // fake cost
-				Expiry:        1609459200, // fake timestamp
+				Miner:         minername,
+				StorageCost:   float64(storageprice),
+				Expiry:        uint32(expiry),
 				TranscodingID: transcodingIDStr,
 			})
+
+			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minername, float64(storageprice), uint32(expiry))
 
 			// set AssetStatus to 3 (completed storage process)
 			dataservice.UpdateAssetStatus(id.String(), 3)
@@ -235,6 +302,7 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	if dataservice.IfAssetExists(vars["asset_id"]) {
 		assetStatus := dataservice.GetAssetStatusIfExists(vars["asset_id"])
+		// fmt.Println("assssssssss", assetStatus)
 		w.WriteHeader(http.StatusOK)
 
 		var data = make(map[string]interface{})
@@ -242,7 +310,13 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 		data["AssetStatus"] = assetStatus
 
 		if assetStatus == 3 {
+			// fmt.Println("assss 3")
 			data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
+			asset := dataservice.GetAsset(vars["asset_id"])
+			data["TranscodingCost"] = asset.TranscodingCost
+			data["Miner"] = asset.Miner
+			data["StorageCost"] = asset.StorageCost
+			data["Expiry"] = asset.Expiry
 		}
 		json, err := json.MarshalIndent(data, "", "    ")
 		if err != nil {

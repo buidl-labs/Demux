@@ -24,7 +24,7 @@ func InitDB() {
 	statement, err := database.Prepare(`
 		CREATE TABLE IF NOT EXISTS TranscodingDeal (
 			TranscodingID   TEXT PRIMARY KEY,
-			TranscodingCost FLOAT,
+			TranscodingCost TEXT,
 			Directory       TEXT,
 			StorageStatus   BOOLEAN
 		)
@@ -59,9 +59,13 @@ func InitDB() {
 
 	statement, err = database.Prepare(`
 		CREATE TABLE IF NOT EXISTS Asset (
-			AssetID       TEXT PRIMARY KEY,
-			AssetName     TEXT,
-			AssetStatus   INT,
+			AssetID         TEXT PRIMARY KEY,
+			AssetName       TEXT,
+			AssetStatus     INT,
+			TranscodingCost TEXT,
+			Miner           TEXT,
+			StorageCost     FLOAT,
+			Expiry          INT
 			CHECK (AssetStatus >= 0 AND AssetStatus <= 3)
 		)
 	`)
@@ -121,6 +125,22 @@ func GetCIDForAsset(assetID string) string {
 	return data[0].CID
 }
 
+// GetAsset returns an asset.
+func GetAsset(assetID string) model.Asset {
+	rows, err := sqldb.Query("SELECT * FROM Asset WHERE AssetID=?", assetID)
+	if err != nil {
+		log.Errorln("Error in getting asset", assetID)
+		log.Errorln(err.Error())
+	}
+	data := []model.Asset{}
+	x := model.Asset{}
+	for rows.Next() {
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry)
+		data = append(data, x)
+	}
+	return data[0]
+}
+
 // CreateAsset creates a new asset.
 func CreateAsset(x model.Asset) {
 	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetName, AssetStatus) VALUES (?, ?, ?)")
@@ -162,7 +182,7 @@ func GetAssetStatusIfExists(assetID string) int {
 	data := []model.Asset{}
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus)
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry)
 		data = append(data, x)
 	}
 	return data[0].AssetStatus
@@ -176,6 +196,20 @@ func UpdateAssetStatus(assetID string, assetStatus int) {
 		log.Errorln(err.Error())
 	}
 	_, err = statement.Exec(assetStatus, assetID)
+	if err != nil {
+		log.Errorln("Error in updating asset", assetID)
+		log.Errorln(err.Error())
+	}
+}
+
+// UpdateAsset updates an asset.
+func UpdateAsset(assetID string, transcodingCost string, miner string, storageCost float64, expiry uint32) {
+	statement, err := sqldb.Prepare("UPDATE Asset SET TranscodingCost=?, Miner=?, StorageCost=?, Expiry=? WHERE AssetID=?")
+	if err != nil {
+		log.Errorln("Error in updating asset", assetID)
+		log.Errorln(err.Error())
+	}
+	_, err = statement.Exec(transcodingCost, miner, storageCost, expiry, assetID)
 	if err != nil {
 		log.Errorln("Error in updating asset", assetID)
 		log.Errorln(err.Error())
