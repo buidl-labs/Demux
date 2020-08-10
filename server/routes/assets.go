@@ -20,11 +20,10 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/ipfs/go-cid"
-	"github.com/multiformats/go-multiaddr"
 )
 
 var (
-	lotusAddr = multiaddr.StringCast("/ip4/0.0.0.0/tcp/5002")
+	powergateAddr = "127.0.0.1:5002"
 )
 
 // AssetsHandler handles the asset uploads
@@ -80,12 +79,12 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 		io.Copy(f, clientFile)
 
 		setup := util.PowergateSetup{
-			LotusAddr:    lotusAddr,
-			MinerAddr:    "t01000", // TODO: select miner by looking at Asks
-			SampleSize:   700,
-			MaxParallel:  1,
-			TotalSamples: 1,
-			RandSeed:     22,
+			PowergateAddr: powergateAddr,
+			MinerAddr:     "t01000", // TODO: select miner by looking at Asks
+			SampleSize:    700,
+			MaxParallel:   1,
+			TotalSamples:  1,
+			RandSeed:      22,
 		}
 
 		go func() {
@@ -94,18 +93,19 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// Start transcoding
 			fmt.Println("start transcoding")
-			cmd1 := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
-				"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
-				"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
-				os.Getenv("ORCH_WEBHOOK_URL"), "-v", "99")
-			stdout1, err := cmd1.Output()
+			// cmd1 := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
+			// 	"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
+			// 	"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
+			// 	os.Getenv("ORCH_WEBHOOK_URL"), "-v", "99")
+			// cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
+			// stdout1, err := cmd1.Output()
 
-			if err != nil {
-				fmt.Println("Some issue with transcoding")
-				log.Println(err)
-				return
-			}
-			_ = stdout1
+			// if err != nil {
+			// 	fmt.Println("Some issue with transcoding")
+			// 	log.Println(err)
+			// 	return
+			// }
+			// _ = stdout1
 
 			transcodingID := guuid.New()
 			fmt.Printf("tidd: %s", transcodingID)

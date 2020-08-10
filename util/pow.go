@@ -8,7 +8,6 @@ import (
 
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/textileio/powergate/api/client"
 	"github.com/textileio/powergate/ffs"
 	"github.com/textileio/powergate/health"
@@ -17,12 +16,12 @@ import (
 
 // PowergateSetup initializes stuff
 type PowergateSetup struct {
-	LotusAddr    multiaddr.Multiaddr
-	MinerAddr    string
-	SampleSize   int64
-	MaxParallel  int
-	TotalSamples int
-	RandSeed     int
+	PowergateAddr string
+	MinerAddr     string
+	SampleSize    int64
+	MaxParallel   int
+	TotalSamples  int
+	RandSeed      int
 }
 
 var (
@@ -32,7 +31,7 @@ var (
 // RunPow runs the pow client
 func RunPow(ctx context.Context, setup PowergateSetup, fileName string) (cid.Cid, string, error) {
 	var somecid cid.Cid
-	c, err := client.NewClient(setup.LotusAddr, grpc.WithInsecure(), grpc.WithPerRPCCredentials(client.TokenAuth{}))
+	c, err := client.NewClient(setup.PowergateAddr, grpc.WithInsecure(), grpc.WithPerRPCCredentials(client.TokenAuth{}))
 	defer func() {
 		if err := c.Close(); err != nil {
 			log.Errorf("closing powergate client: %s", err)
