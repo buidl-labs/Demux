@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -94,12 +95,27 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// Start transcoding
 			fmt.Println("start transcoding")
-			// cmd1 := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
-			// 	"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
-			// 	"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
-			// 	os.Getenv("ORCH_WEBHOOK_URL"), "-v", "99")
-			// cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
-			// stdout1, err := cmd1.Output()
+
+			// var lpWg sync.WaitGroup
+			// lpWg.Add(1)
+
+			// go func() {
+			// 	lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
+			// 		"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
+			// 		"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
+			// 		os.Getenv("ORCH_WEBHOOK_URL"), "-v", "99")
+			// 	lpStdout, err := lpCmd.Output()
+			// 	if err != nil {
+			// 		fmt.Println("Some issue with livepeer transcoding", err)
+			// 	}
+			// 	_ = lpStdout
+			// 	lpWg.Done()
+			// }()
+
+			// lpWg.Wait()
+			// fmt.Println("Done running livepeer cmd")
+
+			// Transcode using ffmpeg if livepeer pull fails
 
 			cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
 			stdout1, err := cmd1.Output()
@@ -278,7 +294,46 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				TranscodingID: transcodingIDStr,
 			})
 
-			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minername, float64(storageprice), uint32(expiry))
+			var IpfsHost = "http://0.0.0.0:8080/ipfs/"
+			var IpfsHostWithCID = IpfsHost + currcidStr
+			fmt.Println("ipfshostcid", IpfsHostWithCID)
+
+			rootm3u8File, err := os.Create("./assets/" + id.String() + "/root.m3u8")
+
+			w := bufio.NewWriter(rootm3u8File)
+
+			n, err := w.WriteString(`#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080
+` + IpfsHostWithCID + `/1080p/myvid.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720
+` + IpfsHostWithCID + `/720p/myvid.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360
+` + IpfsHostWithCID + `/360p/myvid.m3u8`)
+
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			fmt.Printf("wrote %d bytes\n", n)
+			w.Flush()
+
+			rootm3u8currcid, currfname, minername, rootm3u8storageprice, newexpiry, err := util.RunPow(ctx, setup, "./assets/"+id.String()+"/root.m3u8")
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			rootm3u8currcidStr := fmt.Sprintf("%s", rootm3u8currcid)
+			fmt.Println("rootcurrcid", rootm3u8currcid, "rootcurrfname", currfname)
+			totalstorageprice := rootm3u8storageprice + storageprice
+
+			finalexpiry := expiry
+			if newexpiry < expiry {
+				finalexpiry = newexpiry
+			}
+
+			dataservice.UpdateStorageDeal(currcidStr, rootm3u8currcidStr, float64(totalstorageprice), uint32(finalexpiry))
+			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minername, float64(totalstorageprice), uint32(expiry))
 
 			// set AssetStatus to 3 (completed storage process)
 			dataservice.UpdateAssetStatus(id.String(), 3)
@@ -310,8 +365,8 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 		data["AssetStatus"] = assetStatus
 
 		if assetStatus == 3 {
-			// fmt.Println("assss 3")
-			data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
+			fmt.Println("assss 3")
+			data["CID"], data["RootCID"] = dataservice.GetCIDsForAsset(vars["asset_id"])
 			asset := dataservice.GetAsset(vars["asset_id"])
 			data["TranscodingCost"] = asset.TranscodingCost
 			data["Miner"] = asset.Miner

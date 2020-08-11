@@ -22,6 +22,7 @@ type TranscodingDeal struct {
 // StorageDeal is the type binding for a storage deal in the filecoin network.
 type StorageDeal struct {
 	CID           string  `json:"CID"`
+	RootCID       string  `json:"RootCID"`
 	Name          string  `json:"Name"`
 	AssetID       string  `json:"AssetID"`
 	Miner         string  `json:"Miner"`

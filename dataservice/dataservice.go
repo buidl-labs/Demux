@@ -40,6 +40,7 @@ func InitDB() {
 	statement, err = database.Prepare(`
 		CREATE TABLE IF NOT EXISTS StorageDeal (
 			CID           TEXT PRIMARY KEY,
+			RootCID       TEXT,
 			Name          TEXT,
 			AssetID       TEXT,
 			Miner         TEXT,
@@ -109,20 +110,20 @@ func CreateStorageDeal(x model.StorageDeal) {
 	}
 }
 
-// GetCIDForAsset returns the final stream CID for the given asset.
-func GetCIDForAsset(assetID string) string {
+// GetCIDsForAsset returns the final stream CIDs for the given asset.
+func GetCIDsForAsset(assetID string) (string, string) {
 	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
 	if err != nil {
-		log.Errorln("Error in getting CID for asset", assetID)
+		log.Errorln("Error in getting CIDs for asset", assetID)
 		log.Errorln(err.Error())
 	}
 	data := []model.StorageDeal{}
 	x := model.StorageDeal{}
 	for rows.Next() {
-		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
+		rows.Scan(&x.CID, &x.RootCID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
 		data = append(data, x)
 	}
-	return data[0].CID
+	return data[0].CID, data[0].RootCID
 }
 
 // GetAsset returns an asset.
@@ -212,6 +213,20 @@ func UpdateAsset(assetID string, transcodingCost string, miner string, storageCo
 	_, err = statement.Exec(transcodingCost, miner, storageCost, expiry, assetID)
 	if err != nil {
 		log.Errorln("Error in updating asset", assetID)
+		log.Errorln(err.Error())
+	}
+}
+
+// UpdateStorageDeal updates a storage deal.
+func UpdateStorageDeal(CID string, rootCID string, storageCost float64, expiry uint32) {
+	statement, err := sqldb.Prepare("UPDATE StorageDeal SET RootCID=?, StorageCost=?, Expiry=? WHERE CID=?")
+	if err != nil {
+		log.Errorln("Error in updating storage deal", CID)
+		log.Errorln(err.Error())
+	}
+	_, err = statement.Exec(rootCID, storageCost, expiry, CID)
+	if err != nil {
+		log.Errorln("Error in updating storage deal", CID)
 		log.Errorln(err.Error())
 	}
 }

@@ -173,7 +173,27 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 		if err != nil {
 			return ci, "", minerAddr, storageprice, expiry, fmt.Errorf("importing data to hot storage (ipfs node): %s", err)
 		}
+	} else {
+		f, err := os.Open(fileName)
+		// checkErr(err)
+		if err != nil {
+			return ci, "", minerAddr, storageprice, expiry, fmt.Errorf("err opening file...importing data to hot storage (ipfs node): %s", err)
+		}
+		defer func() {
+			e := f.Close()
+			if e != nil {
+				log.Fatal(e)
+				// return ci, "", minerAddr, storageprice, expiry, fmt.Errorf("err closing file...importing data to hot storage (ipfs node): %s", err)
+			}
+		}()
+
+		ptrCid, err := c.FFS.Stage(ctx, f)
+		if err != nil {
+			return ci, "", minerAddr, storageprice, expiry, fmt.Errorf("err opening file...importing data to hot storage (ipfs node): %s", err)
+		}
+		ci = *ptrCid
 	}
+
 	// ci, err := c.FFS.StageFolder(ctx, viper.GetString("ipfsrevproxy"), fileName)
 
 	log.Infof("[%d] Pushing %s to FFS...", id, ci)
