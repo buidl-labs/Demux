@@ -10,7 +10,6 @@ require (
 	github.com/ipfs/go-log/v2 v2.1.2-0.20200626104915-0016c0b4b3e4
 	github.com/mattn/go-sqlite3 v1.14.0
 	github.com/sirupsen/logrus v1.6.0
-	github.com/spf13/viper v1.7.0
 	github.com/textileio/powergate v0.3.1-pre.3
 	google.golang.org/grpc v1.30.0
 )

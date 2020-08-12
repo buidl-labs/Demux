@@ -9,6 +9,8 @@ type Asset struct {
 	Miner           string  `json:"Miner"`
 	StorageCost     float64 `json:"Cost"`
 	Expiry          uint32  `json:"Expiry"`
+	Error           string  `json:"Error"`
+	HttpStatusCode  int     `json:"HttpStatusCode"`
 }
 
 // TranscodingDeal is the type binding for a transcoding deal in the livepeer network.

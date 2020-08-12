@@ -1,2 +1,3 @@
 # Demux
-A gateway to facilitate decentralised streaming ecosystem. 
+
+A gateway to facilitate a decentralised streaming ecosystem.

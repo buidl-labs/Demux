@@ -2,7 +2,6 @@ package dataservice
 
 import (
 	"database/sql"
-
 	"github.com/buidl-labs/Demux/model"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -66,7 +65,9 @@ func InitDB() {
 			TranscodingCost TEXT,
 			Miner           TEXT,
 			StorageCost     FLOAT,
-			Expiry          INT
+			Expiry          INT,
+			Error           TEXT,
+			HttpStatusCode  INT
 			CHECK (AssetStatus >= 0 AND AssetStatus <= 3)
 		)
 	`)
@@ -133,10 +134,25 @@ func GetAsset(assetID string) model.Asset {
 		log.Errorln("Error in getting asset", assetID)
 		log.Errorln(err.Error())
 	}
-	data := []model.Asset{}
+	var data []model.Asset
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry)
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode)
+		data = append(data, x)
+	}
+	return data[0]
+}
+
+func GetAssetError(assetID string) string {
+	rows, err := sqldb.Query("SELECT Error FROM Asset WHERE AssetID=?", assetID)
+	if err != nil {
+		log.Errorln("Error in getting asset error", assetID)
+		log.Errorln(err.Error())
+	}
+	var data []string
+	var x string
+	for rows.Next() {
+		rows.Scan(&x)
 		data = append(data, x)
 	}
 	return data[0]
@@ -144,12 +160,12 @@ func GetAsset(assetID string) model.Asset {
 
 // CreateAsset creates a new asset.
 func CreateAsset(x model.Asset) {
-	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetName, AssetStatus) VALUES (?, ?, ?)")
+	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetName, AssetStatus, Error) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Errorln("Error in inserting Asset", x.AssetID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(x.AssetID, x.AssetName, x.AssetStatus)
+	_, err = statement.Exec(x.AssetID, x.AssetName, x.AssetStatus, x.Error)
 	if err != nil {
 		log.Errorln("Error in inserting Asset", x.AssetID)
 		log.Errorln(err.Error())
@@ -183,7 +199,7 @@ func GetAssetStatusIfExists(assetID string) int {
 	data := []model.Asset{}
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry)
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode)
 		data = append(data, x)
 	}
 	return data[0].AssetStatus
@@ -213,6 +229,20 @@ func UpdateAsset(assetID string, transcodingCost string, miner string, storageCo
 	_, err = statement.Exec(transcodingCost, miner, storageCost, expiry, assetID)
 	if err != nil {
 		log.Errorln("Error in updating asset", assetID)
+		log.Errorln(err.Error())
+	}
+}
+
+// SetAssetError updates the error message for the uploaded asset.
+func SetAssetError(assetID string, errorStr string, httpStatusCode int) {
+	statement, err := sqldb.Prepare("UPDATE Asset SET Error=?, HttpStatusCode=? WHERE AssetID=?")
+	if err != nil {
+		log.Errorln("Error in updating asset error", assetID)
+		log.Errorln(err.Error())
+	}
+	_, err = statement.Exec(errorStr, httpStatusCode, assetID)
+	if err != nil {
+		log.Errorln("Error in updating asset error", assetID)
 		log.Errorln(err.Error())
 	}
 }

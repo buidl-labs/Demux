@@ -1,5 +1,12 @@
 [
   {
+    "name": "1080p",
+    "bitrate": 6000000,
+    "fps": 30,
+    "width": 1920,
+    "height": 1080
+  },
+  {
     "name": "720p",
     "bitrate": 2000000,
     "fps": 30,

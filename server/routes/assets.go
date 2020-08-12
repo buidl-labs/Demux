@@ -3,66 +3,65 @@ package routes
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
-	"math/big"
-	"net/http"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
-
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/ipfs/go-cid"
-)
-
-var (
-	powergateAddr = "127.0.0.1:5002"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 )
 
 // AssetsHandler handles the asset uploads
 func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 
+		var responded = false
+
 		// TODO: handle the case when a remote file is sent
 		// example: https://file-examples-com.github.io/uploads/2017/04/file_example_MP4_1280_10MG.mp4
 		r.Body = http.MaxBytesReader(w, r.Body, 30*1024*1024)
 		clientFile, handler, err := r.FormFile("inputfile")
 		if err != nil {
-			log.Println(err)
-			if handler.Size > 30*1024*1024 {
-				log.Println("Please upload file of size <= 30MB")
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			data := map[string]interface{}{
+				"Error": fmt.Sprintf("please upload a file of size less than 30MB: %s", err),
 			}
+			util.WriteResponse(data, w)
+			responded = true
 			return
 		}
 
 		defer clientFile.Close()
 
-		fmt.Printf("Uploaded File: %+v\n", handler.Filename)
-		fmt.Printf("File Size: %+v\n", handler.Size)
-		fmt.Printf("MIME Header: %+v\n", handler.Header)
+		ss := strings.Split(handler.Filename, ".")
+
+		if ss[len(ss)-1] != "mp4" {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			data := map[string]interface{}{
+				"Error": "please upload an mp4 file",
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
+		}
+
+		// Generate a new assetID and create asset.
 
 		id := guuid.New()
 		dataservice.CreateAsset(model.Asset{
 			AssetID:     id.String(),
 			AssetName:   handler.Filename,
 			AssetStatus: 0,
+			Error:       "",
 		})
-
-		ss := strings.Split(handler.Filename, ".")
-
-		if ss[len(ss)-1] != "mp4" {
-			log.Println("Please upload an mp4 file")
-			return
-		}
 
 		cmd := exec.Command("mkdir", "./assets/"+id.String())
 		stdout, err := cmd.Output()
@@ -71,6 +70,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = stdout
+
 		f, err := os.OpenFile("./assets/"+id.String()+"/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			log.Println(err)
@@ -78,42 +78,34 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		demuxFileName := f.Name()
 		defer f.Close()
-		io.Copy(f, clientFile)
-
-		setup := util.PowergateSetup{
-			PowergateAddr: powergateAddr,
-			MinerAddr:     "t01000", // TODO: select miner by looking at Asks
-			SampleSize:    700,
-			MaxParallel:   1,
-			TotalSamples:  1,
-			RandSeed:      22,
-		}
+		io.Copy(f, clientFile) // copy file to demux server
 
 		go func() {
-			// set AssetStatus to 1 (transcoding)
+			// Set AssetStatus to 1 (transcoding)
 			dataservice.UpdateAssetStatus(id.String(), 1)
 
 			// Start transcoding
-			fmt.Println("start transcoding")
 
-			// var lpWg sync.WaitGroup
-			// lpWg.Add(1)
-
-			// go func() {
-			// 	lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
-			// 		"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
-			// 		"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
-			// 		os.Getenv("ORCH_WEBHOOK_URL"), "-v", "99")
-			// 	lpStdout, err := lpCmd.Output()
-			// 	if err != nil {
-			// 		fmt.Println("Some issue with livepeer transcoding", err)
-			// 	}
-			// 	_ = lpStdout
-			// 	lpWg.Done()
-			// }()
-
-			// lpWg.Wait()
-			// fmt.Println("Done running livepeer cmd")
+			//orchWebhook, orchWebhookExists := os.LookupEnv("ORCH_WEBHOOK_URL")
+			//if !orchWebhookExists {
+			//	dataservice.SetAssetError(id.String(), "please provide the environment variable `ORCH_WEBHOOK_URL`", http.StatusFailedDependency)
+			//	return
+			//}
+			//
+			//log.Println("Starting livepeer transcoding")
+			//
+			//lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
+			//	"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
+			//	"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
+			//	orchWebhook, "-v", "99")
+			//lpStdout, err := lpCmd.Output()
+			//if err != nil {
+			//	dataservice.SetAssetError(id.String(), fmt.Sprintf("livepeer transcoding: %s", err), http.StatusFailedDependency)
+			//	return
+			//}
+			//_ = lpStdout
+			//
+			//log.Println("Done running livepeer cmd")
 
 			// Transcode using ffmpeg if livepeer pull fails
 
@@ -125,76 +117,22 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			stdout3, err := cmd3.Output()
 
 			if err != nil {
-				fmt.Println("Some issue with transcoding")
-				log.Println(err)
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("ffmpeg transcoding: %s", err), http.StatusFailedDependency)
 				return
 			}
 			_ = stdout1
 			_ = stdout2
 			_ = stdout3
 
-			stdout, err := exec.Command("ffprobe", "-i", demuxFileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
+			var transcodingCostWEI string
+			transcodingCostWEI, err = util.CalculateTranscodingCost(demuxFileName)
 			if err != nil {
-				log.Println(err)
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("calculating transcoding cost: %s", err), http.StatusFailedDependency)
 				return
 			}
-			duration, e := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
-			if e != nil {
-				log.Println(e)
-				return
-			}
-
-			// Fetch orchestrator stats from livepeer pricing tool:
-			// GET https://livepeer-pricing-tool.com/orchestratorStats
-
-			orchestratorStats := "https://livepeer-pricing-tool.com/orchestratorStats"
-
-			resp, err := http.Get(orchestratorStats)
-
-			if err != nil {
-				log.Println(err)
-			}
-
-			defer resp.Body.Close()
-
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				log.Println(err)
-			}
-
-			orchStats, err := util.GetOrchestratorStats([]byte(body))
-
-			weightSum := big.NewInt(0)
-			productSum := big.NewFloat(0)
-
-			for _, i := range orchStats {
-				stake := new(big.Float).SetInt(i.DelegatedStake)
-				ppp := new(big.Float).SetFloat64(i.PricePerPixel)
-				product := stake.Mul(stake, ppp)
-
-				weightSum.Add(weightSum, i.DelegatedStake)
-				productSum.Add(productSum, product)
-			}
-
-			// Calculate weighted average price per pixel (weighted by Delegated Stake)
-
-			// weighted pricePerPixel
-			pricePerPixel := new(big.Float).Quo(productSum, new(big.Float).SetInt(weightSum))
-
-			pixels := util.GetTotalPixels(int(duration))
-
-			// Calculate livepeer price for uploaded video
-
-			livepeerPrice := new(big.Float).SetInt(big.NewInt(int64(1)))
-			livepeerPrice = livepeerPrice.Mul(new(big.Float).SetInt(big.NewInt(int64(pixels))), pricePerPixel)
-
-			fmt.Println("livepeerprice", livepeerPrice)
-			transcodingCostWEI := livepeerPrice.String()
-			// transcodingCostWEI := fmt.Sprintf("%s", livepeerPrice)
-			fmt.Println("transcodingCostWEI", transcodingCostWEI)
 
 			transcodingID := guuid.New()
-			fmt.Printf("tidd: %s", transcodingID)
+
 			dataservice.CreateTranscodingDeal(model.TranscodingDeal{
 				TranscodingID:   transcodingID.String(),
 				TranscodingCost: transcodingCostWEI,
@@ -202,44 +140,42 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				StorageStatus:   false,
 			})
 
-			allfiles, err := ioutil.ReadDir("./assets/" + id.String())
+			allFiles, err := ioutil.ReadDir("./assets/" + id.String())
 			if err != nil {
-				log.Fatal(err)
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("reading asset directory: %s", err), http.StatusFailedDependency)
+				return
 			}
 
-			mkdir1080p := exec.Command("mkdir", "./assets/"+id.String()+"/1080p")
-			mkdir720p := exec.Command("mkdir", "./assets/"+id.String()+"/720p")
-			mkdir360p := exec.Command("mkdir", "./assets/"+id.String()+"/360p")
-			mkdir1080p.Output()
-			mkdir720p.Output()
-			mkdir360p.Output()
+			exec.Command("mkdir", "./assets/"+id.String()+"/1080p").Output()
+			exec.Command("mkdir", "./assets/"+id.String()+"/720p").Output()
+			exec.Command("mkdir", "./assets/"+id.String()+"/360p").Output()
 
-			for _, f := range allfiles {
+			log.Println("segmenting the transcoded videos...")
+
+			for _, f := range allFiles {
 				fname := f.Name()
-				fmt.Println("fname", fname)
 				nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
 				name := strings.Split(nm, ".")[0]
-				fmt.Println("name", name)
 				if len(name) > 5 {
 					if name[len(name)-5:] == "1080p" {
 						// 1080p
 						_, err := util.CreateSegments(fname, "1080p", id)
 						if err != nil {
-							log.Println(err)
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
 							return
 						}
 					} else if name[len(name)-4:] == "720p" {
 						// 720p
 						_, err := util.CreateSegments(fname, "720p", id)
 						if err != nil {
-							log.Println(err)
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
 							return
 						}
 					} else if name[len(name)-4:] == "360p" {
 						// 360p
 						_, err := util.CreateSegments(fname, "360p", id)
 						if err != nil {
-							log.Println(err)
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
 							return
 						}
 					}
@@ -248,146 +184,164 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 						// 720p
 						_, err := util.CreateSegments(fname, "720p", id)
 						if err != nil {
-							log.Println(err)
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
 							return
 						}
 					} else if name[len(name)-4:] == "360p" {
 						// 360p
 						_, err := util.CreateSegments(fname, "360p", id)
 						if err != nil {
-							log.Println(err)
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
 							return
 						}
 					}
 				}
 			}
 
-			// // Janitor: delete original mp4 file
-			// exec.Command("rm", "-rf", demuxFileName)
+			log.Println("completed segmentation")
 
-			// set AssetStatus to 2 (storing in ipfs+filecoin network)
+			// Delete original mp4 file
+			exec.Command("rm", "-rf", demuxFileName).Output()
+
+			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
 
-			// store video in ipfs/filecoin network
+			// Store video in ipfs/filecoin network
 
 			ctx := context.Background()
 
-			var currcid cid.Cid
-			var currfname string
-			currcid, currfname, minername, storageprice, expiry, err := util.RunPow(ctx, setup, "./assets/"+id.String())
+			var currCID cid.Cid
+			var currFolderName string
+			currCID, currFolderName, minerName, storagePrice, expiry, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
 			if err != nil {
-				fmt.Println(err)
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
 				return
 			}
-			fmt.Println("currcid", currcid, "currfname", currfname)
 
-			transcodingIDStr := fmt.Sprintf("%s", transcodingID)
-			currcidStr := fmt.Sprintf("%s", currcid)
+			log.Printf("CID: %s, currFolderName: %s\n", currCID, currFolderName)
+			currCIDStr := fmt.Sprintf("%s", currCID)
 
 			dataservice.CreateStorageDeal(model.StorageDeal{
-				CID:           currcidStr,
-				Name:          currfname,
+				CID:           currCIDStr,
+				Name:          currFolderName,
 				AssetID:       id.String(),
-				Miner:         minername,
-				StorageCost:   float64(storageprice),
+				Miner:         minerName,
+				StorageCost:   float64(storagePrice),
 				Expiry:        uint32(expiry),
-				TranscodingID: transcodingIDStr,
+				TranscodingID: transcodingID.String(),
 			})
 
-			var IpfsHost = "http://0.0.0.0:8080/ipfs/"
-			var IpfsHostWithCID = IpfsHost + currcidStr
-			fmt.Println("ipfshostcid", IpfsHostWithCID)
-
-			rootm3u8File, err := os.Create("./assets/" + id.String() + "/root.m3u8")
-
-			w := bufio.NewWriter(rootm3u8File)
-
-			n, err := w.WriteString(`#EXTM3U
-#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080
-` + IpfsHostWithCID + `/1080p/myvid.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720
-` + IpfsHostWithCID + `/720p/myvid.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360
-` + IpfsHostWithCID + `/360p/myvid.m3u8`)
-
-			if err != nil {
-				fmt.Println(err)
+			var IpfsHostWithCID string
+			IpfsHost, IpfsHostExists := os.LookupEnv("IPFS_HOST")
+			if !IpfsHostExists {
+				dataservice.SetAssetError(id.String(), "please provide the environment variable `IPFS_HOST`", http.StatusFailedDependency)
 				return
 			}
 
-			fmt.Printf("wrote %d bytes\n", n)
-			w.Flush()
+			if IpfsHost[len(IpfsHost)-1:] == "/" {
+				IpfsHostWithCID = IpfsHost + currCIDStr
+			} else {
+				IpfsHostWithCID = IpfsHost + "/" + currCIDStr
+			}
 
-			rootm3u8currcid, currfname, minername, rootm3u8storageprice, newexpiry, err := util.RunPow(ctx, setup, "./assets/"+id.String()+"/root.m3u8")
+			abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
+
+			bWriter := bufio.NewWriter(abrStreamFile)
+
+			n, err := bWriter.WriteString("#EXTM3U\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n" +
+				IpfsHostWithCID + "/1080p/myvid.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
+				IpfsHostWithCID + "/720p/myvid.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n" +
+				IpfsHostWithCID + "/360p/myvid.m3u8\n")
+
 			if err != nil {
-				fmt.Println(err)
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating the root m3u8 file: %s", err), http.StatusFailedDependency)
 				return
 			}
-			rootm3u8currcidStr := fmt.Sprintf("%s", rootm3u8currcid)
-			fmt.Println("rootcurrcid", rootm3u8currcid, "rootcurrfname", currfname)
-			totalstorageprice := rootm3u8storageprice + storageprice
 
-			finalexpiry := expiry
-			if newexpiry < expiry {
-				finalexpiry = newexpiry
+			log.Println("created the root m3u8 file")
+			log.Printf("Wrote %d bytes\n", n)
+			bWriter.Flush()
+
+			abrStreamCID, abrStreamFileName, minerName, abrStreamStoragePrice, abrStreamExpiry, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String()+"/root.m3u8")
+			if err != nil {
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
+				return
+			}
+			log.Printf("abrStreamCID: %s, abrStreamFileName: %s\n", abrStreamCID, abrStreamFileName)
+			totalStoragePrice := abrStreamStoragePrice + storagePrice
+
+			finalExpiry := expiry
+			if abrStreamExpiry < expiry {
+				finalExpiry = abrStreamExpiry
 			}
 
-			dataservice.UpdateStorageDeal(currcidStr, rootm3u8currcidStr, float64(totalstorageprice), uint32(finalexpiry))
-			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minername, float64(totalstorageprice), uint32(expiry))
+			abrStreamCIDStr := fmt.Sprintf("%s", abrStreamCID)
 
-			// set AssetStatus to 3 (completed storage process)
+			dataservice.UpdateStorageDeal(currCIDStr, abrStreamCIDStr, float64(totalStoragePrice), uint32(finalExpiry))
+			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(totalStoragePrice), uint32(expiry))
+
+			// Set AssetStatus to 3 (completed storage process)
 			dataservice.UpdateAssetStatus(id.String(), 3)
+			dataservice.SetAssetError(id.String(), "", http.StatusOK)
 		}()
 
-		w.WriteHeader(http.StatusOK)
-		data := map[string]interface{}{
-			"AssetID": id.String(),
+		if responded == false {
+			w.WriteHeader(http.StatusOK)
+			data := map[string]interface{}{
+				"AssetID": id.String(),
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
 		}
-		json, err := json.MarshalIndent(data, "", "    ")
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Fprintln(w, string(json))
 	}
 }
 
 // AssetsStatusHandler enables checking the status of an asset in its demux lifecycle.
 func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+	if r.Method == "GET" {
+		vars := mux.Vars(r)
 
-	if dataservice.IfAssetExists(vars["asset_id"]) {
-		assetStatus := dataservice.GetAssetStatusIfExists(vars["asset_id"])
-		// fmt.Println("assssssssss", assetStatus)
-		w.WriteHeader(http.StatusOK)
+		if dataservice.IfAssetExists(vars["asset_id"]) {
+			assetStatus := dataservice.GetAssetStatusIfExists(vars["asset_id"])
+			assetError := dataservice.GetAssetError(vars["asset_id"])
 
-		var data = make(map[string]interface{})
-		data["AssetID"] = vars["asset_id"]
-		data["AssetStatus"] = assetStatus
+			if assetError == "" {
+				w.WriteHeader(http.StatusOK)
+				var data = make(map[string]interface{})
+				data["AssetID"] = vars["asset_id"]
+				data["AssetStatus"] = assetStatus
 
-		if assetStatus == 3 {
-			fmt.Println("assss 3")
-			data["CID"], data["RootCID"] = dataservice.GetCIDsForAsset(vars["asset_id"])
-			asset := dataservice.GetAsset(vars["asset_id"])
-			data["TranscodingCost"] = asset.TranscodingCost
-			data["Miner"] = asset.Miner
-			data["StorageCost"] = asset.StorageCost
-			data["Expiry"] = asset.Expiry
+				if assetStatus == 3 {
+					data["CID"], data["RootCID"] = dataservice.GetCIDsForAsset(vars["asset_id"])
+					asset := dataservice.GetAsset(vars["asset_id"])
+					data["TranscodingCost"] = asset.TranscodingCost
+					data["Miner"] = asset.Miner
+					data["StorageCost"] = asset.StorageCost
+					data["Expiry"] = asset.Expiry
+				}
+				util.WriteResponse(data, w)
+				return
+			} else {
+				w.WriteHeader(http.StatusOK)
+				data := map[string]interface{}{
+					"AssetID": vars["asset_id"],
+					"Error":   dataservice.GetAssetError(vars["asset_id"]),
+				}
+				util.WriteResponse(data, w)
+				return
+			}
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			data := map[string]interface{}{
+				"AssetID": nil,
+				"Error":   "no such asset",
+			}
+			util.WriteResponse(data, w)
+			return
 		}
-		json, err := json.MarshalIndent(data, "", "    ")
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Fprintln(w, string(json))
-	} else {
-		w.WriteHeader(http.StatusNotFound)
-		data := map[string]interface{}{
-			"AssetID": nil,
-			"Error":   "No such asset",
-		}
-		json, err := json.MarshalIndent(data, "", "    ")
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Fprintln(w, string(json))
 	}
 }
