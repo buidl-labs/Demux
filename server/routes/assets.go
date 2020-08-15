@@ -201,7 +201,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("completed segmentation")
 
 			// Delete original mp4 file
-			exec.Command("rm", "-rf", demuxFileName).Output()
+			exec.Command("rm", "-rf", "./assets/"+id.String()+"/*.mp4").Output()
 
 			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
