@@ -52,6 +52,8 @@ func GetTotalPixels(duration int) int {
 	return pixels1080p + pixels720p + pixels360p
 }
 
+// CalculateTranscodingCost computes the transcoding cost
+// of a video in wei and returns it.
 func CalculateTranscodingCost(fileName string) (string, error) {
 	stdout, err := exec.Command("ffprobe", "-i", fileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
 	if err != nil {

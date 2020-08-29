@@ -19,4 +19,5 @@ func WriteResponse(data map[string]interface{}, w http.ResponseWriter) {
 	return
 }
 
+// Upload is a helper function
 func Upload(w http.ResponseWriter, r *http.Request) {}

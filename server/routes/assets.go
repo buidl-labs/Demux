@@ -4,12 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/buidl-labs/Demux/dataservice"
-	"github.com/buidl-labs/Demux/model"
-	"github.com/buidl-labs/Demux/util"
-	guuid "github.com/google/uuid"
-	"github.com/gorilla/mux"
-	"github.com/ipfs/go-cid"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,6 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/buidl-labs/Demux/dataservice"
+	"github.com/buidl-labs/Demux/model"
+	"github.com/buidl-labs/Demux/util"
+	guuid "github.com/google/uuid"
+	"github.com/gorilla/mux"
+	"github.com/ipfs/go-cid"
 )
 
 // AssetsHandler handles the asset uploads

@@ -26,10 +26,14 @@ type PowergateSetup struct {
 }
 
 var (
-	log           = logging.Logger("runner")
-	powergateAddr = os.Getenv("POWERGATE_ADDR")
+	log                  = logging.Logger("runner")
+	powergateAddr        = os.Getenv("POWERGATE_ADDR")
+	ipfsRevProxyAddr     = os.Getenv("IPFS_REV_PROXY_ADDR")
+	epochDurationSeconds = 30
+	minDealDuration      = 180 * (24 * 60 * 60 / epochDurationSeconds)
 )
 
+// InitialPowergateSetup creates an instance of PowergateSetup
 var InitialPowergateSetup = PowergateSetup{
 	PowergateAddr: powergateAddr,
 	SampleSize:    700,
@@ -105,7 +109,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	if err != nil {
 		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("getting instance info: %s", err)
 	}
-	golog.Printf("ffs info: [%s]\n", info)
+	golog.Printf("ffs info: [%v]\n", info)
 	log.Infof("ffs info: [%s]\n", info)
 
 	// Asks index
@@ -171,7 +175,6 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 	defer log.Infof("[%d] Done", id)
 
 	var ci cid.Cid
-	var fileCloseError error
 
 	fi, err := os.Stat(fName)
 	if os.IsNotExist(err) {
@@ -183,7 +186,7 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 
 	if fi.IsDir() {
 		// if a folder has been pushed
-		ci, err = c.FFS.StageFolder(ctx, "127.0.0.1:6002", fName)
+		ci, err = c.FFS.StageFolder(ctx, ipfsRevProxyAddr, fName)
 		if err != nil {
 			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("importing folder to hot storage (ipfs node): %s", err)
 		}
@@ -196,7 +199,6 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 		defer func() {
 			e := f.Close()
 			if e != nil {
-				fileCloseError = e
 				golog.Printf("closing file: %s", e)
 				log.Infof("closing file: %s", e)
 			}
@@ -226,29 +228,29 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 			Enabled: true,
 			Filecoin: ffs.FilConfig{
 				RepFactor:       1,
-				DealMinDuration: 1000,
+				DealMinDuration: int64(minDealDuration),
 				Addr:            addr,
 				CountryCodes:    nil,
 				ExcludedMiners:  nil,
 				TrustedMiners:   []string{minerAddr},
-				Renew:           ffs.FilRenew{Enabled: true, Threshold: 100},
+				Renew:           ffs.FilRenew{Enabled: false, Threshold: 0},
 				MaxPrice:        uint64(storagePrice),
 			},
 		},
 	}
 
-	jobId, err := c.FFS.PushStorageConfig(ctx, ci, client.WithStorageConfig(cidConfig))
+	jobID, err := c.FFS.PushStorageConfig(ctx, ci, client.WithStorageConfig(cidConfig))
 	if err != nil {
 		return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("pushing to FFS: %s", err)
 	}
 
-	golog.Printf("[%d] Pushed successfully, queued job %s. Waiting for termination...", id, jobId)
-	log.Infof("[%d] Pushed successfully, queued job %s. Waiting for termination...", id, jobId)
+	golog.Printf("[%d] Pushed successfully, queued job %s. Waiting for termination...", id, jobID)
+	log.Infof("[%d] Pushed successfully, queued job %s. Waiting for termination...", id, jobID)
 
 	chJob := make(chan client.JobEvent, 1)
 	ctxWatch, cancel := context.WithCancel(ctx)
 	defer cancel()
-	err = c.FFS.WatchJobs(ctxWatch, chJob, jobId)
+	err = c.FFS.WatchJobs(ctxWatch, chJob, jobID)
 	if err != nil {
 		return ci, "", minerAddr, storagePrice, expiry, fmt.Errorf("opening listening job status: %s", err)
 	}
