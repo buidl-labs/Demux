@@ -2,6 +2,7 @@ package routes
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/model"
@@ -87,43 +89,63 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// Start transcoding
 
-			//orchWebhook, orchWebhookExists := os.LookupEnv("ORCH_WEBHOOK_URL")
-			//if !orchWebhookExists {
-			//	dataservice.SetAssetError(id.String(), "please provide the environment variable `ORCH_WEBHOOK_URL`", http.StatusFailedDependency)
-			//	return
-			//}
-			//
-			//log.Println("Starting livepeer transcoding")
-			//
-			//lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
-			//	"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
-			//	"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
-			//	orchWebhook, "-v", "99")
-			//lpStdout, err := lpCmd.Output()
-			//if err != nil {
-			//	dataservice.SetAssetError(id.String(), fmt.Sprintf("livepeer transcoding: %s", err), http.StatusFailedDependency)
-			//	return
-			//}
-			//_ = lpStdout
-			//
-			//log.Println("Done running livepeer cmd")
+			livepeerPullCompleted := false
 
-			// Transcode using ffmpeg if livepeer pull fails
-
-			cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
-			stdout1, err := cmd1.Output()
-			cmd2 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:720", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random720p.mp4")
-			stdout2, err := cmd2.Output()
-			cmd3 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:360", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random360p.mp4")
-			stdout3, err := cmd3.Output()
-
-			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("ffmpeg transcoding: %s", err), http.StatusFailedDependency)
+			orchWebhook, orchWebhookExists := os.LookupEnv("ORCH_WEBHOOK_URL")
+			if !orchWebhookExists {
+				dataservice.SetAssetError(id.String(), "please provide the environment variable `ORCH_WEBHOOK_URL`", http.StatusFailedDependency)
 				return
 			}
-			_ = stdout1
-			_ = stdout2
-			_ = stdout3
+
+			log.Println("Starting livepeer transcoding")
+
+			lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
+				"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
+				"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
+				orchWebhook, "-v", "99")
+
+			var buf bytes.Buffer
+			lpCmd.Stdout = &buf
+
+			lpCmd.Start()
+
+			done := make(chan error)
+			go func() { done <- lpCmd.Wait() }()
+
+			timeout := time.After(2 * time.Minute)
+
+			select {
+			case <-timeout:
+				lpCmd.Process.Kill()
+				log.Println("Livepeer pull timed out")
+			case err := <-done:
+				if err != nil {
+					dataservice.SetAssetError(id.String(), fmt.Sprintf("livepeer transcoding: %s", err), http.StatusFailedDependency)
+					return
+				}
+				livepeerPullCompleted = true
+				log.Println("Done running livepeer cmd")
+			}
+
+			// Transcode using ffmpeg if livepeer pull fails or times out
+			if livepeerPullCompleted == false {
+				cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
+				stdout1, err := cmd1.Output()
+				cmd2 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:720", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random720p.mp4")
+				stdout2, err := cmd2.Output()
+				cmd3 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:360", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random360p.mp4")
+				stdout3, err := cmd3.Output()
+
+				if err != nil {
+					dataservice.SetAssetError(id.String(), fmt.Sprintf("ffmpeg transcoding: %s", err), http.StatusFailedDependency)
+					return
+				}
+				_ = stdout1
+				_ = stdout2
+				_ = stdout3
+			}
+
+			// Calculate transcoding cost of the video.
 
 			var transcodingCostWEI string
 			transcodingCostWEI, err = util.CalculateTranscodingCost(demuxFileName)
