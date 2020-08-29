@@ -39,7 +39,6 @@ func InitDB() {
 	statement, err = database.Prepare(`
 		CREATE TABLE IF NOT EXISTS StorageDeal (
 			CID           TEXT PRIMARY KEY,
-			RootCID       TEXT,
 			Name          TEXT,
 			AssetID       TEXT,
 			Miner         TEXT,
@@ -111,8 +110,8 @@ func CreateStorageDeal(x model.StorageDeal) {
 	}
 }
 
-// GetCIDsForAsset returns the final stream CIDs for the given asset.
-func GetCIDsForAsset(assetID string) (string, string) {
+// GetCIDForAsset returns the final stream CIDs for the given asset.
+func GetCIDForAsset(assetID string) (string) {
 	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
 	if err != nil {
 		log.Errorln("Error in getting CIDs for asset", assetID)
@@ -121,10 +120,10 @@ func GetCIDsForAsset(assetID string) (string, string) {
 	data := []model.StorageDeal{}
 	x := model.StorageDeal{}
 	for rows.Next() {
-		rows.Scan(&x.CID, &x.RootCID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
 		data = append(data, x)
 	}
-	return data[0].CID, data[0].RootCID
+	return data[0].CID
 }
 
 // GetAsset returns an asset.
@@ -248,13 +247,13 @@ func SetAssetError(assetID string, errorStr string, httpStatusCode int) {
 }
 
 // UpdateStorageDeal updates a storage deal.
-func UpdateStorageDeal(CID string, rootCID string, storageCost float64, expiry uint32) {
-	statement, err := sqldb.Prepare("UPDATE StorageDeal SET RootCID=?, StorageCost=?, Expiry=? WHERE CID=?")
+func UpdateStorageDeal(CID string, storageCost float64, expiry uint32) {
+	statement, err := sqldb.Prepare("UPDATE StorageDeal SET StorageCost=?, Expiry=? WHERE CID=?")
 	if err != nil {
 		log.Errorln("Error in updating storage deal", CID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(rootCID, storageCost, expiry, CID)
+	_, err = statement.Exec(CID, storageCost, expiry, CID)
 	if err != nil {
 		log.Errorln("Error in updating storage deal", CID)
 		log.Errorln(err.Error())

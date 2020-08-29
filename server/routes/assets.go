@@ -207,15 +207,50 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
 
+			// Create root abrStreamFile
+			abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
+
+			bWriter := bufio.NewWriter(abrStreamFile)
+
+			n, err := bWriter.WriteString("#EXTM3U\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n" +
+				"1080p/myvid.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
+				"720p/myvid.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n" +
+				"360p/myvid.m3u8\n")
+
+			if err != nil {
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating the root m3u8 file: %s", err), http.StatusFailedDependency)
+				return
+			}
+
+			log.Println("created the root m3u8 file")
+			log.Printf("Wrote %d bytes\n", n)
+			bWriter.Flush()
+
 			// Store video in ipfs/filecoin network
 
 			ctx := context.Background()
 
 			var currCID cid.Cid
 			var currFolderName string
-			currCID, currFolderName, minerName, storagePrice, expiry, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
+			currCID, currFolderName, minerName, storagePrice, expiry, staged, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
 			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
+				if staged {
+					currCIDStr := fmt.Sprintf("%s", currCID)
+					dataservice.CreateStorageDeal(model.StorageDeal{
+						CID:           currCIDStr,
+						Name:          currFolderName,
+						AssetID:       id.String(),
+						Miner:         "",
+						StorageCost:   float64(0),
+						Expiry:        uint32(0),
+						TranscodingID: transcodingID.String(),
+					})
+				} else {
+					dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
+				}
 				return
 			}
 
@@ -232,57 +267,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				TranscodingID: transcodingID.String(),
 			})
 
-			var IpfsHostWithCID string
-			IpfsHost, IpfsHostExists := os.LookupEnv("IPFS_HOST")
-			if !IpfsHostExists {
-				dataservice.SetAssetError(id.String(), "please provide the environment variable `IPFS_HOST`", http.StatusFailedDependency)
-				return
-			}
-
-			if IpfsHost[len(IpfsHost)-1:] == "/" {
-				IpfsHostWithCID = IpfsHost + currCIDStr
-			} else {
-				IpfsHostWithCID = IpfsHost + "/" + currCIDStr
-			}
-
-			abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
-
-			bWriter := bufio.NewWriter(abrStreamFile)
-
-			n, err := bWriter.WriteString("#EXTM3U\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n" +
-				IpfsHostWithCID + "/1080p/myvid.m3u8\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
-				IpfsHostWithCID + "/720p/myvid.m3u8\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n" +
-				IpfsHostWithCID + "/360p/myvid.m3u8\n")
-
-			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating the root m3u8 file: %s", err), http.StatusFailedDependency)
-				return
-			}
-
-			log.Println("created the root m3u8 file")
-			log.Printf("Wrote %d bytes\n", n)
-			bWriter.Flush()
-
-			abrStreamCID, abrStreamFileName, minerName, abrStreamStoragePrice, abrStreamExpiry, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String()+"/root.m3u8")
-			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
-				return
-			}
-			log.Printf("abrStreamCID: %s, abrStreamFileName: %s\n", abrStreamCID, abrStreamFileName)
-			totalStoragePrice := abrStreamStoragePrice + storagePrice
-
-			finalExpiry := expiry
-			if abrStreamExpiry < expiry {
-				finalExpiry = abrStreamExpiry
-			}
-
-			abrStreamCIDStr := fmt.Sprintf("%s", abrStreamCID)
-
-			dataservice.UpdateStorageDeal(currCIDStr, abrStreamCIDStr, float64(totalStoragePrice), uint32(finalExpiry))
-			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(totalStoragePrice), uint32(expiry))
+			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(storagePrice), uint32(expiry))
 
 			// Set AssetStatus to 3 (completed storage process)
 			dataservice.UpdateAssetStatus(id.String(), 3)
@@ -317,7 +302,7 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 				data["AssetStatus"] = assetStatus
 
 				if assetStatus == 3 {
-					data["CID"], data["RootCID"] = dataservice.GetCIDsForAsset(vars["asset_id"])
+					data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
 					asset := dataservice.GetAsset(vars["asset_id"])
 					data["TranscodingCost"] = asset.TranscodingCost
 					data["Miner"] = asset.Miner

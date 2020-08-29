@@ -43,11 +43,12 @@ var InitialPowergateSetup = PowergateSetup{
 }
 
 // RunPow runs the powergate client
-func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, string, string, int, int, error) {
+func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, string, string, int, int, bool, error) {
 	var currCid cid.Cid // CID for the file/folder that is being stored
 	var minerName string
 	var storagePrice int
 	var expiry int // unix timestamp
+	var staged bool = false
 	var powCloseError error
 
 	// Create a new powergate client
@@ -59,21 +60,21 @@ func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, s
 		}
 	}()
 	if err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("creating client: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("creating client: %s", err)
 	}
 
 	if err := sanityCheck(ctx, c); err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("sanity check with client: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("sanity check with client: %s", err)
 	}
 
-	if currCid, fName, minerName, storagePrice, expiry, err = runSetup(ctx, c, setup, fName); err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("running test setup: %s", err)
+	if currCid, fName, minerName, storagePrice, expiry, staged, err = runSetup(ctx, c, setup, fName); err != nil {
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("running test setup: %s", err)
 	}
 
 	if powCloseError != nil {
-		return currCid, fName, minerName, storagePrice, expiry, powCloseError
+		return currCid, fName, minerName, storagePrice, expiry, staged, powCloseError
 	}
-	return currCid, fName, minerName, storagePrice, expiry, nil
+	return currCid, fName, minerName, storagePrice, expiry, staged, nil
 }
 
 func sanityCheck(ctx context.Context, c *client.Client) error {
@@ -87,17 +88,18 @@ func sanityCheck(ctx context.Context, c *client.Client) error {
 	return nil
 }
 
-func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName string) (cid.Cid, string, string, int, int, error) {
+func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName string) (cid.Cid, string, string, int, int, bool, error) {
 
 	var currCid cid.Cid
 	var minerName string
 	var storagePrice int
 	var expiry int
+	var staged bool = false
 
 	// Create new ffs instance
 	_, tok, err := c.FFS.Create(ctx)
 	if err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("creating ffs instance: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("creating ffs instance: %s", err)
 	}
 
 	golog.Printf("ffs tok: [%s]\n", tok)
@@ -107,7 +109,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 
 	info, err := c.FFS.Info(ctx)
 	if err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("getting instance info: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("getting instance info: %s", err)
 	}
 	golog.Printf("ffs info: [%v]\n", info)
 	log.Infof("ffs info: [%s]\n", info)
@@ -115,7 +117,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	// Asks index
 	index, err := c.Asks.Get(ctx)
 	if err != nil {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("getting asks index: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("getting asks index: %s", err)
 	}
 
 	if len(index.Storage) > 0 {
@@ -148,7 +150,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 		chLimit <- struct{}{}
 		go func(i int) {
 			defer func() { <-chLimit }()
-			if currCid, fName, minerName, storagePrice, expiry, err = run(ctx, c, i, setup.RandSeed+i, setup.SampleSize, addr, fName, minerName, storagePrice, expiry); err != nil {
+			if currCid, fName, minerName, storagePrice, expiry, staged, err = run(ctx, c, i, setup.RandSeed+i, setup.SampleSize, addr, fName, minerName, storagePrice, expiry); err != nil {
 				chErr <- fmt.Errorf("failed run %d: %s", i, err)
 			} else {
 				// no errors
@@ -162,39 +164,40 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	}
 	close(chErr)
 	for err := range chErr {
-		return currCid, fName, minerName, storagePrice, expiry, fmt.Errorf("sample run errored: %s", err)
+		return currCid, fName, minerName, storagePrice, expiry, staged, fmt.Errorf("sample run errored: %s", err)
 	}
 
-	return currCid, fName, minerName, storagePrice, expiry, nil
+	return currCid, fName, minerName, storagePrice, expiry, staged, nil
 }
 
-func run(ctx context.Context, c *client.Client, id int, seed int, size int64, addr string, fName string, minerAddr string, storagePrice int, expiry int) (cid.Cid, string, string, int, int, error) {
+func run(ctx context.Context, c *client.Client, id int, seed int, size int64, addr string, fName string, minerAddr string, storagePrice int, expiry int) (cid.Cid, string, string, int, int, bool, error) {
 	golog.Printf("[%d] Executing run...", id)
 	log.Infof("[%d] Executing run...", id)
 	defer golog.Printf("[%d] Done", id)
 	defer log.Infof("[%d] Done", id)
 
 	var ci cid.Cid
+	var staged bool = false
 
 	fi, err := os.Stat(fName)
 	if os.IsNotExist(err) {
-		return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("file/folder doesn't exist: %s", err)
+		return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("file/folder doesn't exist: %s", err)
 	}
 	if err != nil {
-		return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("getting file/folder information: %s", err)
+		return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("getting file/folder information: %s", err)
 	}
 
 	if fi.IsDir() {
 		// if a folder has been pushed
 		ci, err = c.FFS.StageFolder(ctx, ipfsRevProxyAddr, fName)
 		if err != nil {
-			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("importing folder to hot storage (ipfs node): %s", err)
+			return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("importing folder to hot storage (ipfs node): %s", err)
 		}
 	} else {
 		// if a file has been pushed
 		f, err := os.Open(fName)
 		if err != nil {
-			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("importing file to hot storage (ipfs node): %s", err)
+			return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("importing file to hot storage (ipfs node): %s", err)
 		}
 		defer func() {
 			e := f.Close()
@@ -206,10 +209,12 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 
 		ptrCid, err := c.FFS.Stage(ctx, f)
 		if err != nil {
-			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("importing file to hot storage (ipfs node): %s", err)
+			return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("importing file to hot storage (ipfs node): %s", err)
 		}
 		ci = *ptrCid
 	}
+
+	staged = true
 
 	golog.Printf("[%d] Pushing %s to FFS...", id, ci)
 	log.Infof("[%d] Pushing %s to FFS...", id, ci)
@@ -241,7 +246,7 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 
 	jobID, err := c.FFS.PushStorageConfig(ctx, ci, client.WithStorageConfig(cidConfig))
 	if err != nil {
-		return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("pushing to FFS: %s", err)
+		return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("pushing to FFS: %s", err)
 	}
 
 	golog.Printf("[%d] Pushed successfully, queued job %s. Waiting for termination...", id, jobID)
@@ -252,23 +257,23 @@ func run(ctx context.Context, c *client.Client, id int, seed int, size int64, ad
 	defer cancel()
 	err = c.FFS.WatchJobs(ctxWatch, chJob, jobID)
 	if err != nil {
-		return ci, "", minerAddr, storagePrice, expiry, fmt.Errorf("opening listening job status: %s", err)
+		return ci, "", minerAddr, storagePrice, expiry, staged, fmt.Errorf("opening listening job status: %s", err)
 	}
 	var s client.JobEvent
 	for s = range chJob {
 		if s.Err != nil {
-			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("job watching: %s", s.Err)
+			return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("job watching: %s", s.Err)
 		}
 		golog.Printf("[%d] Job changed to status %s", id, ffs.JobStatusStr[s.Job.Status])
 		log.Infof("[%d] Job changed to status %s", id, ffs.JobStatusStr[s.Job.Status])
 		if s.Job.Status == ffs.Failed || s.Job.Status == ffs.Canceled {
-			return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("job execution failed or was canceled")
+			return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("job execution failed or was canceled")
 		}
 		if s.Job.Status == ffs.Success {
 			golog.Printf("success!!! cid: [%s] fName: [%s]\n", ci, fName)
 			log.Infof("success!!! cid: [%s] fName: [%s]\n", ci, fName)
-			return ci, fName, minerAddr, storagePrice, expiry, nil
+			return ci, fName, minerAddr, storagePrice, expiry, staged, nil
 		}
 	}
-	return ci, fName, minerAddr, storagePrice, expiry, fmt.Errorf("unexpected Job status watcher")
+	return ci, fName, minerAddr, storagePrice, expiry, staged, fmt.Errorf("unexpected Job status watcher")
 }
