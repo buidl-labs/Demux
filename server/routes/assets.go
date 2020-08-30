@@ -270,6 +270,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 						Expiry:        uint32(0),
 						TranscodingID: transcodingID.String(),
 					})
+					dataservice.UpdateAssetStatus(id.String(), 3)
 				} else {
 					dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
 				}
@@ -303,7 +304,6 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			util.WriteResponse(data, w)
 			responded = true
-			return
 		}
 	}
 }
@@ -332,7 +332,6 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 					data["Expiry"] = asset.Expiry
 				}
 				util.WriteResponse(data, w)
-				return
 			} else {
 				w.WriteHeader(http.StatusOK)
 				data := map[string]interface{}{
@@ -340,7 +339,6 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 					"Error":   dataservice.GetAssetError(vars["asset_id"]),
 				}
 				util.WriteResponse(data, w)
-				return
 			}
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -349,7 +347,6 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 				"Error":   "no such asset",
 			}
 			util.WriteResponse(data, w)
-			return
 		}
 	}
 }
