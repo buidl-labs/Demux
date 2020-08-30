@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -99,7 +100,8 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			log.Println("Starting livepeer transcoding")
 
-			lpCmd := exec.Command("./livepeerPull/livepeer", "-pull", demuxFileName,
+			goos := runtime.GOOS
+			lpCmd := exec.Command("./livepeerPull/"+goos+"/livepeer", "-pull", demuxFileName,
 				"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
 				"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
 				orchWebhook, "-v", "99")
