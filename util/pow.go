@@ -13,7 +13,6 @@ import (
 	"github.com/textileio/powergate/api/client"
 	"github.com/textileio/powergate/ffs"
 	"github.com/textileio/powergate/health"
-	"google.golang.org/grpc"
 )
 
 // PowergateSetup initializes stuff
@@ -52,7 +51,7 @@ func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, s
 	var powCloseError error
 
 	// Create a new powergate client
-	c, err := client.NewClient(setup.PowergateAddr, grpc.WithInsecure(), grpc.WithPerRPCCredentials(client.TokenAuth{}))
+	c, err := client.NewClient(setup.PowergateAddr)
 	defer func() {
 		if err := c.Close(); err != nil {
 			log.Errorf("closing powergate client: %s", err)
@@ -121,8 +120,8 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	}
 
 	if len(index.Storage) > 0 {
-		fmt.Printf("Storage median price: %v\n", index.StorageMedianPrice)
-		fmt.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
+		golog.Printf("Storage median price: %v\n", index.StorageMedianPrice)
+		golog.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
 		data := make([][]string, len(index.Storage))
 		i := 0
 		for _, a := range index.Storage {
@@ -138,6 +137,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 			}
 			i++
 		}
+		golog.Println(data)
 	}
 
 	// wallet address
