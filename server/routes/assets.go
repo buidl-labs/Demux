@@ -92,9 +92,9 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			livepeerPullCompleted := false
 
-			orchWebhook, orchWebhookExists := os.LookupEnv("ORCH_WEBHOOK_URL")
-			if !orchWebhookExists {
-				dataservice.SetAssetError(id.String(), "please provide the environment variable `ORCH_WEBHOOK_URL`", http.StatusFailedDependency)
+			livepeerAPIKey, livepeerAPIKeyExists := os.LookupEnv("LIVEPEER_COM_API_KEY")
+			if !livepeerAPIKeyExists {
+				dataservice.SetAssetError(id.String(), "please provide the environment variable `LIVEPEER_COM_API_KEY`", http.StatusFailedDependency)
 				return
 			}
 
@@ -103,8 +103,8 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			goos := runtime.GOOS
 			lpCmd := exec.Command("./livepeerPull/"+goos+"/livepeer", "-pull", demuxFileName,
 				"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
-				"./livepeerPull/configs/profiles.json", "-orchWebhookUrl",
-				orchWebhook, "-v", "99")
+				"./livepeerPull/configs/profiles.json", "-apiKey",
+				livepeerAPIKey, "-v", "99")
 
 			var buf bytes.Buffer
 			lpCmd.Stdout = &buf
