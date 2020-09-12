@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
@@ -42,6 +44,9 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			responded = true
 			return
 		}
+
+		videoFileSize := handler.Size
+		log.Println("videoFileSize:", videoFileSize)
 
 		defer clientFile.Close()
 
@@ -114,7 +119,18 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			done := make(chan error)
 			go func() { done <- lpCmd.Wait() }()
 
-			timeout := time.After(2 * time.Minute)
+			var timeout <-chan time.Time
+			var limit int64 = 30 * 1024 * 1024
+
+			if videoFileSize <= limit/4 {
+				timeout = time.After(2 * time.Minute)
+			} else if videoFileSize <= limit/2 {
+				timeout = time.After(3 * time.Minute)
+			} else if videoFileSize <= limit*3/4 {
+				timeout = time.After(4 * time.Minute)
+			} else {
+				timeout = time.After(5 * time.Minute)
+			}
 
 			select {
 			case <-timeout:
@@ -131,20 +147,24 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// Transcode using ffmpeg if livepeer pull fails or times out
 			if livepeerPullCompleted == false {
-				cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:1080", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random1080p.mp4")
-				stdout1, err := cmd1.Output()
-				cmd2 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:720", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random720p.mp4")
-				stdout2, err := cmd2.Output()
-				cmd3 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:360", "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random360p.mp4")
-				stdout3, err := cmd3.Output()
+				resos := [3]string{"1080", "720", "360"}
 
-				if err != nil {
-					dataservice.SetAssetError(id.String(), fmt.Sprintf("ffmpeg transcoding: %s", err), http.StatusFailedDependency)
-					return
+				var transcodeWg sync.WaitGroup
+				transcodeWg.Add(3)
+				for _, res := range resos {
+					go func(res string) {
+						cmd1 := exec.Command("ffmpeg", "-i", demuxFileName, "-vf", "scale=-1:"+res, "-c:v", "libx264", "-crf", "18", "-preset", "ultrafast", "-c:a", "copy", "./assets/"+id.String()+"/random"+res+"p.mp4")
+						stdout1, err := cmd1.Output()
+						if err != nil {
+							dataservice.SetAssetError(id.String(), fmt.Sprintf("ffmpeg transcoding: %s", err), http.StatusFailedDependency)
+							return
+						}
+						_ = stdout1
+
+						transcodeWg.Done()
+					}(res)
 				}
-				_ = stdout1
-				_ = stdout2
-				_ = stdout3
+				transcodeWg.Wait()
 			}
 
 			// Calculate transcoding cost of the video.
@@ -165,6 +185,33 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				StorageStatus:   false,
 			})
 
+			if livepeerPullCompleted == false {
+				log.Println("lpcfalse")
+				util.RemoveContents("./assets/" + id.String())
+			} else {
+				rmcmd := exec.Command("rm", "-rf", demuxFileName)
+				_, err := rmcmd.Output()
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				pattern := "./assets/" + id.String() + "/*_source.mp4"
+				matches, err := filepath.Glob(pattern)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				if len(matches) == 1 {
+					rmcmd = exec.Command("rm", "-rf", matches[0])
+					_, err := rmcmd.Output()
+					if err != nil {
+						log.Println(err)
+						return
+					}
+				}
+			}
+
 			allFiles, err := ioutil.ReadDir("./assets/" + id.String())
 			if err != nil {
 				dataservice.SetAssetError(id.String(), fmt.Sprintf("reading asset directory: %s", err), http.StatusFailedDependency)
@@ -177,56 +224,61 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			log.Println("segmenting the transcoded videos...")
 
+			var wg sync.WaitGroup
+			wg.Add(3)
+
 			for _, f := range allFiles {
-				fname := f.Name()
-				nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
-				name := strings.Split(nm, ".")[0]
-				if len(name) > 5 {
-					if name[len(name)-5:] == "1080p" {
-						// 1080p
-						_, err := util.CreateSegments(fname, "1080p", id)
-						if err != nil {
-							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-							return
+				go func(f os.FileInfo) {
+					fname := f.Name()
+					nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
+					name := strings.Split(nm, ".")[0]
+					if len(name) > 5 {
+						if name[len(name)-5:] == "1080p" {
+							// 1080p
+							_, err := util.CreateSegments(fname, "1080p", id)
+							if err != nil {
+								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+								return
+							}
+						} else if name[len(name)-4:] == "720p" {
+							// 720p
+							_, err := util.CreateSegments(fname, "720p", id)
+							if err != nil {
+								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+								return
+							}
+						} else if name[len(name)-4:] == "360p" {
+							// 360p
+							_, err := util.CreateSegments(fname, "360p", id)
+							if err != nil {
+								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+								return
+							}
 						}
-					} else if name[len(name)-4:] == "720p" {
-						// 720p
-						_, err := util.CreateSegments(fname, "720p", id)
-						if err != nil {
-							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-							return
-						}
-					} else if name[len(name)-4:] == "360p" {
-						// 360p
-						_, err := util.CreateSegments(fname, "360p", id)
-						if err != nil {
-							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-							return
+					} else if len(name) > 4 {
+						if name[len(name)-4:] == "720p" {
+							// 720p
+							_, err := util.CreateSegments(fname, "720p", id)
+							if err != nil {
+								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+								return
+							}
+						} else if name[len(name)-4:] == "360p" {
+							// 360p
+							_, err := util.CreateSegments(fname, "360p", id)
+							if err != nil {
+								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+								return
+							}
 						}
 					}
-				} else if len(name) > 4 {
-					if name[len(name)-4:] == "720p" {
-						// 720p
-						_, err := util.CreateSegments(fname, "720p", id)
-						if err != nil {
-							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-							return
-						}
-					} else if name[len(name)-4:] == "360p" {
-						// 360p
-						_, err := util.CreateSegments(fname, "360p", id)
-						if err != nil {
-							dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-							return
-						}
-					}
-				}
+					wg.Done()
+				}(f)
 			}
 
-			log.Println("completed segmentation")
+			wg.Wait()
 
-			// Delete original mp4 file
-			exec.Command("rm", "-rf", "./assets/"+id.String()+"/*.mp4").Output()
+			log.Println("completed segmentation")
 
 			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
