@@ -2,6 +2,7 @@ package dataservice
 
 import (
 	"database/sql"
+
 	"github.com/buidl-labs/Demux/model"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -29,11 +30,11 @@ func InitDB() {
 		)
 	`)
 	if err != nil {
-		log.Fatalln("a1Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln("a2Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 
 	statement, err = database.Prepare(`
@@ -44,16 +45,19 @@ func InitDB() {
 			Miner         TEXT,
 			StorageCost   FLOAT,
 			Expiry        UNSIGNED BIG INT,
-			TranscodingID TEXT
+			TranscodingID TEXT,
+			Token         TEXT,
+			JID           TEXT,
+			Status        INT
 		)
 	`)
 
 	if err != nil {
-		log.Fatalln("s1Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln("s2Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 
 	statement, err = database.Prepare(`
@@ -67,16 +71,16 @@ func InitDB() {
 			Expiry          INT,
 			Error           TEXT,
 			HttpStatusCode  INT
-			CHECK (AssetStatus >= 0 AND AssetStatus <= 3)
+			CHECK (AssetStatus >= 0 AND AssetStatus <= 4)
 		)
 	`)
 
 	if err != nil {
-		log.Fatalln("h1Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln("h2Error in creating DB", err.Error())
+		log.Fatalln("Error in creating DB", err.Error())
 	}
 
 	log.Info("DB created successfully.")
@@ -98,12 +102,12 @@ func CreateTranscodingDeal(x model.TranscodingDeal) {
 
 // CreateStorageDeal creates a new storage deal.
 func CreateStorageDeal(x model.StorageDeal) {
-	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, AssetID, Miner, StorageCost, Expiry, TranscodingID) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (CID, Name, AssetID, Miner, StorageCost, Expiry, TranscodingID, Token, JID, Status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		log.Errorln("Error in inserting StorageDeal", x.CID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(x.CID, x.Name, x.AssetID, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID)
+	_, err = statement.Exec(x.CID, x.Name, x.AssetID, x.Miner, x.StorageCost, x.Expiry, x.TranscodingID, x.Token, x.JID, x.Status)
 	if err != nil {
 		log.Errorln("Error in inserting StorageDeal", x.CID)
 		log.Errorln(err.Error())
@@ -111,7 +115,7 @@ func CreateStorageDeal(x model.StorageDeal) {
 }
 
 // GetCIDForAsset returns the final stream CIDs for the given asset.
-func GetCIDForAsset(assetID string) (string) {
+func GetCIDForAsset(assetID string) string {
 	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
 	if err != nil {
 		log.Errorln("Error in getting CIDs for asset", assetID)
@@ -120,7 +124,7 @@ func GetCIDForAsset(assetID string) (string) {
 	data := []model.StorageDeal{}
 	x := model.StorageDeal{}
 	for rows.Next() {
-		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID)
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID, &x.Token, &x.JID, &x.Status)
 		data = append(data, x)
 	}
 	return data[0].CID
@@ -142,6 +146,7 @@ func GetAsset(assetID string) model.Asset {
 	return data[0]
 }
 
+// GetAssetError returns an asset error.
 func GetAssetError(assetID string) string {
 	rows, err := sqldb.Query("SELECT Error FROM Asset WHERE AssetID=?", assetID)
 	if err != nil {
@@ -247,15 +252,79 @@ func SetAssetError(assetID string, errorStr string, httpStatusCode int) {
 }
 
 // UpdateStorageDeal updates a storage deal.
-func UpdateStorageDeal(CID string, storageCost float64, expiry uint32) {
-	statement, err := sqldb.Prepare("UPDATE StorageDeal SET StorageCost=?, Expiry=? WHERE CID=?")
+func UpdateStorageDeal(CID string, storageCost float64, expiry uint32, miner string) {
+	statement, err := sqldb.Prepare("UPDATE StorageDeal SET StorageCost=?, Expiry=?, Miner=? WHERE CID=?")
 	if err != nil {
 		log.Errorln("Error in updating storage deal", CID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(CID, storageCost, expiry, CID)
+	_, err = statement.Exec(storageCost, expiry, miner, CID)
 	if err != nil {
 		log.Errorln("Error in updating storage deal", CID)
 		log.Errorln(err.Error())
 	}
+}
+
+// GetPendingDeals returns the pending storage deals.
+func GetPendingDeals() []model.StorageDeal {
+	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE Status=?", 0)
+	if err != nil {
+		log.Errorln("Error in getting asset")
+		log.Errorln(err.Error())
+	}
+	data := []model.StorageDeal{}
+	x := model.StorageDeal{}
+	for rows.Next() {
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID, &x.Token, &x.JID, &x.Status)
+		data = append(data, x)
+	}
+	return data
+}
+
+// UpdateStorageDealStatus updates a storage deal status.
+func UpdateStorageDealStatus(CID string, status uint32) {
+	statement, err := sqldb.Prepare("UPDATE StorageDeal SET Status=? WHERE CID=?")
+	if err != nil {
+		log.Errorln("Error in updating storage deal", CID)
+		log.Errorln(err.Error())
+	}
+	_, err = statement.Exec(status, CID)
+	if err != nil {
+		log.Errorln("Error in updating storage deal", CID)
+		log.Errorln(err.Error())
+	}
+}
+
+// GetStorageDealStatus returns the status of a storage deal
+// having a particular assetID.
+func GetStorageDealStatus(assetID string) uint32 {
+	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
+	if err != nil {
+		log.Errorln("Error in getting StorageDeal", assetID)
+		log.Errorln(err.Error())
+	}
+	data := []model.StorageDeal{}
+	x := model.StorageDeal{}
+	for rows.Next() {
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID, &x.Token, &x.JID, &x.Status)
+		data = append(data, x)
+	}
+	return data[0].Status
+}
+
+// GetStorageDeal returns a storage deal
+// having a particular assetID.
+func GetStorageDeal(assetID string) model.StorageDeal {
+	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
+	if err != nil {
+		log.Errorln("Error in getting StorageDeal", assetID)
+		log.Errorln(err.Error())
+	}
+	data := []model.StorageDeal{}
+	x := model.StorageDeal{}
+	for rows.Next() {
+		rows.Scan(&x.CID, &x.Name, &x.AssetID, &x.Miner, &x.StorageCost, &x.Expiry, &x.TranscodingID, &x.Token, &x.JID, &x.Status)
+		data = append(data, x)
+	}
+	return data[0]
 }

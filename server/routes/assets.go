@@ -173,7 +173,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			transcodingCostWEI, err = util.CalculateTranscodingCost(demuxFileName)
 			if err != nil {
 				dataservice.SetAssetError(id.String(), fmt.Sprintf("calculating transcoding cost: %s", err), http.StatusFailedDependency)
-				return
+				transcodingCostWEI = "0"
 			}
 
 			transcodingID := guuid.New()
@@ -280,9 +280,6 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			log.Println("completed segmentation")
 
-			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
-			dataservice.UpdateAssetStatus(id.String(), 2)
-
 			// Create root abrStreamFile
 			abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
 
@@ -305,14 +302,17 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Wrote %d bytes\n", n)
 			bWriter.Flush()
 
-			// Store video in ipfs/filecoin network
+			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
+			dataservice.UpdateAssetStatus(id.String(), 2)
 
 			ctx := context.Background()
 
 			var currCID cid.Cid
+			var jid string
 			var currFolderName string
-			currCID, currFolderName, minerName, storagePrice, expiry, staged, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
+			currCID, currFolderName, minerName, tok, jid, storagePrice, expiry, staged, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
 			if err != nil {
+				log.Println(err)
 				if staged {
 					currCIDStr := fmt.Sprintf("%s", currCID)
 					dataservice.CreateStorageDeal(model.StorageDeal{
@@ -323,7 +323,12 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 						StorageCost:   float64(0),
 						Expiry:        uint32(0),
 						TranscodingID: transcodingID.String(),
+						Token:         tok,
+						Status:        0, //pinned to ipfs
+						JID:           jid,
 					})
+					dataservice.UpdateAsset(id.String(), transcodingCostWEI, "", float64(0), uint32(0))
+					// Set AssetStatus to 3 (pushed CID for storage deal job)
 					dataservice.UpdateAssetStatus(id.String(), 3)
 				} else {
 					dataservice.SetAssetError(id.String(), fmt.Sprintf("creating storage deal: %s", err), http.StatusFailedDependency)
@@ -339,14 +344,17 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				Name:          currFolderName,
 				AssetID:       id.String(),
 				Miner:         minerName,
-				StorageCost:   float64(storagePrice),
-				Expiry:        uint32(expiry),
+				StorageCost:   float64(0),
+				Expiry:        uint32(0),
 				TranscodingID: transcodingID.String(),
+				Token:         tok,
+				Status:        0, //pinned to ipfs
+				JID:           jid,
 			})
 
 			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(storagePrice), uint32(expiry))
 
-			// Set AssetStatus to 3 (completed storage process)
+			// Set AssetStatus to 3 (pushed CID for storage deal job)
 			dataservice.UpdateAssetStatus(id.String(), 3)
 			dataservice.SetAssetError(id.String(), "", http.StatusOK)
 		}()
@@ -381,9 +389,24 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 					data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
 					asset := dataservice.GetAsset(vars["asset_id"])
 					data["TranscodingCost"] = asset.TranscodingCost
-					data["Miner"] = asset.Miner
-					data["StorageCost"] = asset.StorageCost
-					data["Expiry"] = asset.Expiry
+
+					if dataservice.GetStorageDealStatus(vars["asset_id"]) == 0 {
+						data["Status"] = "Filecoin deal pending"
+						data["Miner"] = asset.Miner
+						data["StorageCost"] = asset.StorageCost
+						data["Expiry"] = asset.Expiry
+					} else if dataservice.GetStorageDealStatus(vars["asset_id"]) == 1 {
+						data["Status"] = "Completed Filecoin storage deal"
+						storageDeal := dataservice.GetStorageDeal(vars["asset_id"])
+						data["Miner"] = storageDeal.Miner
+						data["StorageCost"] = storageDeal.StorageCost
+						data["Expiry"] = storageDeal.Expiry
+					} else {
+						data["Status"] = "Failed to store in Filecoin"
+						data["Miner"] = asset.Miner
+						data["StorageCost"] = asset.StorageCost
+						data["Expiry"] = asset.Expiry
+					}
 				}
 				util.WriteResponse(data, w)
 			} else {

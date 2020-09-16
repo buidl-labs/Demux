@@ -30,4 +30,7 @@ type StorageDeal struct {
 	StorageCost   float64 `json:"Cost"`
 	Expiry        uint32  `json:"Expiry"`
 	TranscodingID string  `json:"TranscodingID"`
+	Token         string  `json:"Token"`
+	JID           string  `json:"JID"`
+	Status        uint32  `json:"Status"`
 }
