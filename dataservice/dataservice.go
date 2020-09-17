@@ -70,7 +70,8 @@ func InitDB() {
 			StorageCost     FLOAT,
 			Expiry          INT,
 			Error           TEXT,
-			HttpStatusCode  INT
+			HttpStatusCode  INT,
+			StreamURL       TEXT
 			CHECK (AssetStatus >= 0 AND AssetStatus <= 4)
 		)
 	`)
@@ -140,7 +141,7 @@ func GetAsset(assetID string) model.Asset {
 	var data []model.Asset
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode)
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode, &x.StreamURL)
 		data = append(data, x)
 	}
 	return data[0]
@@ -203,7 +204,7 @@ func GetAssetStatusIfExists(assetID string) int {
 	data := []model.Asset{}
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode)
+		rows.Scan(&x.AssetID, &x.AssetName, &x.AssetStatus, &x.TranscodingCost, &x.Miner, &x.StorageCost, &x.Expiry, &x.Error, &x.HttpStatusCode, &x.StreamURL)
 		data = append(data, x)
 	}
 	return data[0].AssetStatus
@@ -224,13 +225,13 @@ func UpdateAssetStatus(assetID string, assetStatus int) {
 }
 
 // UpdateAsset updates an asset.
-func UpdateAsset(assetID string, transcodingCost string, miner string, storageCost float64, expiry uint32) {
-	statement, err := sqldb.Prepare("UPDATE Asset SET TranscodingCost=?, Miner=?, StorageCost=?, Expiry=? WHERE AssetID=?")
+func UpdateAsset(assetID string, transcodingCost string, miner string, storageCost float64, expiry uint32, streamURL string) {
+	statement, err := sqldb.Prepare("UPDATE Asset SET TranscodingCost=?, Miner=?, StorageCost=?, Expiry=?, StreamURL=? WHERE AssetID=?")
 	if err != nil {
 		log.Errorln("Error in updating asset", assetID)
 		log.Errorln(err.Error())
 	}
-	_, err = statement.Exec(transcodingCost, miner, storageCost, expiry, assetID)
+	_, err = statement.Exec(transcodingCost, miner, storageCost, expiry, streamURL, assetID)
 	if err != nil {
 		log.Errorln("Error in updating asset", assetID)
 		log.Errorln(err.Error())

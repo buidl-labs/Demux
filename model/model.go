@@ -11,6 +11,7 @@ type Asset struct {
 	Expiry          uint32  `json:"Expiry"`
 	Error           string  `json:"Error"`
 	HttpStatusCode  int     `json:"HttpStatusCode"`
+	StreamURL       string  `json:"StreamURL"`
 }
 
 // TranscodingDeal is the type binding for a transcoding deal in the livepeer network.

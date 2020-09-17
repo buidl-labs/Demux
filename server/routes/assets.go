@@ -308,6 +308,9 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			ctx := context.Background()
 
 			var currCID cid.Cid
+			var streamURL string
+			var pinataIpfsGateway = "https://gateway.pinata.cloud/ipfs/"
+			var ipfsioGateway = "https://ipfs.io/ipfs/"
 			var jid string
 			var currFolderName string
 			currCID, currFolderName, minerName, tok, jid, storagePrice, expiry, staged, err := util.RunPow(ctx, util.InitialPowergateSetup, "./assets/"+id.String())
@@ -315,6 +318,19 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				log.Println(err)
 				if staged {
 					currCIDStr := fmt.Sprintf("%s", currCID)
+					pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
+					if pinataErr != nil {
+						dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
+						return
+					}
+					if pinataCID == currCIDStr {
+						fmt.Println("EQ")
+						streamURL = pinataIpfsGateway + pinataCID
+					} else {
+						fmt.Println("NOTEQ", pinataCID, currCIDStr)
+						streamURL = ipfsioGateway + currCIDStr
+					}
+
 					dataservice.CreateStorageDeal(model.StorageDeal{
 						CID:           currCIDStr,
 						Name:          currFolderName,
@@ -327,7 +343,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 						Status:        0, //pinned to ipfs
 						JID:           jid,
 					})
-					dataservice.UpdateAsset(id.String(), transcodingCostWEI, "", float64(0), uint32(0))
+					dataservice.UpdateAsset(id.String(), transcodingCostWEI, "", float64(0), uint32(0), streamURL+"/root.m3u8")
 					// Set AssetStatus to 3 (pushed CID for storage deal job)
 					dataservice.UpdateAssetStatus(id.String(), 3)
 				} else {
@@ -338,6 +354,18 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			log.Printf("CID: %s, currFolderName: %s\n", currCID, currFolderName)
 			currCIDStr := fmt.Sprintf("%s", currCID)
+			pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
+			if pinataErr != nil {
+				dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
+				return
+			}
+			if pinataCID == currCIDStr {
+				fmt.Println("EQ")
+				streamURL = pinataIpfsGateway + pinataCID
+			} else {
+				fmt.Println("NOTEQ", pinataCID, currCIDStr)
+				streamURL = ipfsioGateway + currCIDStr
+			}
 
 			dataservice.CreateStorageDeal(model.StorageDeal{
 				CID:           currCIDStr,
@@ -352,7 +380,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				JID:           jid,
 			})
 
-			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(storagePrice), uint32(expiry))
+			dataservice.UpdateAsset(id.String(), transcodingCostWEI, minerName, float64(storagePrice), uint32(expiry), streamURL+"/root.m3u8")
 
 			// Set AssetStatus to 3 (pushed CID for storage deal job)
 			dataservice.UpdateAssetStatus(id.String(), 3)
@@ -389,6 +417,7 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 					data["CID"] = dataservice.GetCIDForAsset(vars["asset_id"])
 					asset := dataservice.GetAsset(vars["asset_id"])
 					data["TranscodingCost"] = asset.TranscodingCost
+					data["StreamURL"] = asset.StreamURL
 
 					if dataservice.GetStorageDealStatus(vars["asset_id"]) == 0 {
 						data["Status"] = "Filecoin deal pending"
