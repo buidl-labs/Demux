@@ -73,7 +73,7 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 
 	var aborted bool
 	var abortMsg string
-	var job ffs.Job
+	var job ffs.StorageJob
 	select {
 	case <-ctx.Done():
 		log.Infof("job %s status watching canceled", jid)

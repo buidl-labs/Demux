@@ -208,8 +208,9 @@ func run(ctx context.Context, c *client.Client, id int, size int64, addr string,
 	cidConfig := ffs.StorageConfig{
 		Repairable: false,
 		Hot: ffs.HotConfig{
-			Enabled:       true,
-			AllowUnfreeze: false,
+			Enabled:          true,
+			AllowUnfreeze:    false,
+			UnfreezeMaxPrice: 0,
 			Ipfs: ffs.IpfsConfig{
 				AddTimeout: 30,
 			},
