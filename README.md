@@ -4,19 +4,15 @@ A gateway to facilitate a decentralised streaming ecosystem.
 
 ## Getting Started
 
-- Clone the repo and update submodules:
-  - `git clone https://github.com/buidl-labs/Demux`
-  - `git submodule update --init --recursive`
-- Running the filecoin localnet using powergate:
-  - Start your docker daemon
-  - `cd Demux/powergate/docker`
-  - Start the localnet: `make localnet`
+- Clone the repo: `git clone https://github.com/buidl-labs/Demux`
 - Download the latest build of livepeer pull mode:
-  - linux: https://build.livepeer.live/0.5.8-aed26dfc/livepeer-linux-amd64.tar.gz
-  - mac: https://build.livepeer.live/0.5.8-aed26dfc/livepeer-darwin-amd64.tar.gz
-- Place the `livepeer` binary inside `Demux/livepeerPull/` directory.
-- In a new terminal window, set environment variables (sample present in `Demux/.env.sample`)
-- Run server: `make run`
+  - linux: https://build.livepeer.live/0.5.10-32544624/livepeer-linux-amd64.tar.gz
+  - mac: https://build.livepeer.live/0.5.10-32544624/livepeer-darwin-amd64.tar.gz
+- Place the `livepeer` binary inside `Demux/livepeerPull/linux` or `Demux/livepeerPull/darwin` directory, depending on your OS.
+- Create a file `.env` and set environment variables (sample present in `Demux/.env.sample`)
+- Run your docker daemon.
+- Build the docker image: `docker build --tag demux:latest .`
+- Run Demux: `docker run -p 8000:8000 --env-file ./.env demux:latest`
 
 ## API Endpoints
 
@@ -54,11 +50,11 @@ A gateway to facilitate a decentralised streaming ecosystem.
   {
     "AssetID": "fba8cda5-6c71-46d7-ac15-28424343c037",
     "AssetStatus": 3,
-    "CID": "bafybeifpkabn6hkh4njamtiwcj45p4ig3eibfy6ac2jhltvssyf4eoes54",
-    "Expiry": 1000000,
+    "CID": "bafybeiew6zbs4ljg37phxr3ejt5ydci2ir4nkcbuqdkxctvzyip6hb7one",
+    "Expiry": 0,
     "Miner": "t01000",
-    "RootCID": "QmdhwHpiZM53nRCVhftxk2aw8qFvMdw2AZV2ABi74t13ad",
-    "StorageCost": 1000000000,
+    "Status": "Completed Filecoin storage deal",
+    "StorageCost": 0.000001019146484375,
     "TranscodingCost": "2.838960491e+13"
   }
   ```
