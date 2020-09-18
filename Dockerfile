@@ -14,6 +14,9 @@ RUN go mod download
 COPY . .
 RUN go build cmd/main.go
 
+RUN curl https://build.livepeer.live/0.5.10-32544624/livepeer-linux-amd64.tar.gz | tar -xz
+RUN cp livepeer-linux-amd64/livepeer livepeerPull/linux
+
 ENV LIVEPEER_COM_API_KEY=${LIVEPEER_COM_API_KEY}
 ENV LIVEPEER_PRICING_TOOL=${LIVEPEER_PRICING_TOOL}
 ENV POWERGATE_ADDR=${POWERGATE_ADDR}
