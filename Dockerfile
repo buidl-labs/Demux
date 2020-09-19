@@ -1,4 +1,4 @@
-FROM golang:1.14.4
+FROM golang:1.15.2-buster
 LABEL maintainer="Rajdeep Bharati <rajdeep@buidllabs.io>"
 
 RUN apt-get update
