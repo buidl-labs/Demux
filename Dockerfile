@@ -14,8 +14,10 @@ RUN go mod download
 COPY . .
 RUN go build cmd/main.go
 
-RUN curl https://build.livepeer.live/0.5.10-32544624/livepeer-linux-amd64.tar.gz | tar -xz
-RUN cp livepeer-linux-amd64/livepeer livepeerPull/linux
+# RUN curl https://build.livepeer.live/0.5.10-32544624/livepeer-linux-amd64.tar.gz | tar -xz
+# RUN cp livepeer-linux-amd64/livepeer livepeerPull/linux
+RUN curl -OL https://github.com/rajdeepbharati/go-livepeer/releases/download/v0.5-demux-1/livepeer
+RUN cp ./livepeer livepeerPull/linux
 
 ENV LIVEPEER_COM_API_KEY=${LIVEPEER_COM_API_KEY}
 ENV LIVEPEER_PRICING_TOOL=${LIVEPEER_PRICING_TOOL}
