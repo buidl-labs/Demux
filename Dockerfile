@@ -5,6 +5,7 @@ RUN apt-get update
 RUN apt-cache depends ffmpeg
 RUN apt-get install -y ffmpeg
 RUN ffmpeg -version
+RUN apt-get install -y sqlite3
 
 RUN mkdir /demuxapp
 WORKDIR /demuxapp
