@@ -109,7 +109,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			lpCmd := exec.Command("./livepeerPull/"+goos+"/livepeer", "-pull", demuxFileName,
 				"-recordingDir", "./assets/"+id.String(), "-transcodingOptions",
 				"./livepeerPull/configs/profiles.json", "-apiKey",
-				livepeerAPIKey, "-v", "99")
+				livepeerAPIKey, "-v", "99", "-mediaDir", "./assets/"+id.String())
 
 			var buf bytes.Buffer
 			lpCmd.Stdout = &buf
@@ -196,14 +196,15 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				pattern := "./assets/" + id.String() + "/*_source.mp4"
+				pattern := "./assets/" + id.String() + "/*.mp4"
 				matches, err := filepath.Glob(pattern)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				if len(matches) == 1 {
-					rmcmd = exec.Command("rm", "-rf", matches[0])
+				fmt.Println("mpfmatches", matches)
+				for _, match := range matches {
+					rmcmd = exec.Command("rm", "-rf", match)
 					_, err := rmcmd.Output()
 					if err != nil {
 						log.Println(err)
@@ -212,95 +213,114 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			allFiles, err := ioutil.ReadDir("./assets/" + id.String())
-			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("reading asset directory: %s", err), http.StatusFailedDependency)
-				return
-			}
+			if livepeerPullCompleted == false {
+				allFiles, err := ioutil.ReadDir("./assets/" + id.String())
+				if err != nil {
+					dataservice.SetAssetError(id.String(), fmt.Sprintf("reading asset directory: %s", err), http.StatusFailedDependency)
+					return
+				}
 
-			exec.Command("mkdir", "./assets/"+id.String()+"/1080p").Output()
-			exec.Command("mkdir", "./assets/"+id.String()+"/720p").Output()
-			exec.Command("mkdir", "./assets/"+id.String()+"/360p").Output()
+				exec.Command("mkdir", "./assets/"+id.String()+"/1080p").Output()
+				exec.Command("mkdir", "./assets/"+id.String()+"/720p").Output()
+				exec.Command("mkdir", "./assets/"+id.String()+"/360p").Output()
 
-			log.Println("segmenting the transcoded videos...")
+				log.Println("segmenting the transcoded videos...")
 
-			var wg sync.WaitGroup
-			wg.Add(3)
+				var wg sync.WaitGroup
+				wg.Add(3)
 
-			for _, f := range allFiles {
-				go func(f os.FileInfo) {
-					fname := f.Name()
-					nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
-					name := strings.Split(nm, ".")[0]
-					if len(name) > 5 {
-						if name[len(name)-5:] == "1080p" {
-							// 1080p
-							_, err := util.CreateSegments(fname, "1080p", id)
-							if err != nil {
-								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-								return
+				for _, f := range allFiles {
+					go func(f os.FileInfo) {
+						fname := f.Name()
+						nm := strings.Split(fname, "/")[len(strings.Split(fname, "/"))-1]
+						name := strings.Split(nm, ".")[0]
+						if len(name) > 5 {
+							if name[len(name)-5:] == "1080p" {
+								// 1080p
+								_, err := util.CreateSegments(fname, "1080p", id)
+								if err != nil {
+									dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+									return
+								}
+							} else if name[len(name)-4:] == "720p" {
+								// 720p
+								_, err := util.CreateSegments(fname, "720p", id)
+								if err != nil {
+									dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+									return
+								}
+							} else if name[len(name)-4:] == "360p" {
+								// 360p
+								_, err := util.CreateSegments(fname, "360p", id)
+								if err != nil {
+									dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+									return
+								}
 							}
-						} else if name[len(name)-4:] == "720p" {
-							// 720p
-							_, err := util.CreateSegments(fname, "720p", id)
-							if err != nil {
-								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-								return
-							}
-						} else if name[len(name)-4:] == "360p" {
-							// 360p
-							_, err := util.CreateSegments(fname, "360p", id)
-							if err != nil {
-								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-								return
+						} else if len(name) > 4 {
+							if name[len(name)-4:] == "720p" {
+								// 720p
+								_, err := util.CreateSegments(fname, "720p", id)
+								if err != nil {
+									dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+									return
+								}
+							} else if name[len(name)-4:] == "360p" {
+								// 360p
+								_, err := util.CreateSegments(fname, "360p", id)
+								if err != nil {
+									dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
+									return
+								}
 							}
 						}
-					} else if len(name) > 4 {
-						if name[len(name)-4:] == "720p" {
-							// 720p
-							_, err := util.CreateSegments(fname, "720p", id)
-							if err != nil {
-								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-								return
-							}
-						} else if name[len(name)-4:] == "360p" {
-							// 360p
-							_, err := util.CreateSegments(fname, "360p", id)
-							if err != nil {
-								dataservice.SetAssetError(id.String(), fmt.Sprintf("creating segments: %s", err), http.StatusFailedDependency)
-								return
-							}
-						}
+						wg.Done()
+					}(f)
+				}
+
+				wg.Wait()
+
+				log.Println("completed segmentation")
+
+				// Create root abrStreamFile
+				abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
+
+				bWriter := bufio.NewWriter(abrStreamFile)
+
+				n, err := bWriter.WriteString("#EXTM3U\n" +
+					"#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n" +
+					"1080p/myvid.m3u8\n" +
+					"#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
+					"720p/myvid.m3u8\n" +
+					"#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n" +
+					"360p/myvid.m3u8\n")
+
+				if err != nil {
+					dataservice.SetAssetError(id.String(), fmt.Sprintf("creating the root m3u8 file: %s", err), http.StatusFailedDependency)
+					return
+				}
+
+				log.Println("created the root m3u8 file")
+				log.Printf("Wrote %d bytes\n", n)
+				bWriter.Flush()
+			} else {
+				pattern := "./assets/" + id.String() + "/*.m3u8"
+				matches, err := filepath.Glob(pattern)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				if len(matches) == 1 {
+					fmt.Println("matchesm3u8", matches)
+					renameCmd := exec.Command("cp", matches[0], "./assets/"+id.String()+"/root.m3u8")
+					stdout, err := renameCmd.Output()
+					if err != nil {
+						log.Println(err)
+						return
 					}
-					wg.Done()
-				}(f)
+					_ = stdout
+				}
 			}
-
-			wg.Wait()
-
-			log.Println("completed segmentation")
-
-			// Create root abrStreamFile
-			abrStreamFile, err := os.Create("./assets/" + id.String() + "/root.m3u8")
-
-			bWriter := bufio.NewWriter(abrStreamFile)
-
-			n, err := bWriter.WriteString("#EXTM3U\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n" +
-				"1080p/myvid.m3u8\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
-				"720p/myvid.m3u8\n" +
-				"#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\n" +
-				"360p/myvid.m3u8\n")
-
-			if err != nil {
-				dataservice.SetAssetError(id.String(), fmt.Sprintf("creating the root m3u8 file: %s", err), http.StatusFailedDependency)
-				return
-			}
-
-			log.Println("created the root m3u8 file")
-			log.Printf("Wrote %d bytes\n", n)
-			bWriter.Flush()
 
 			// Set AssetStatus to 2 (storing in ipfs+filecoin network)
 			dataservice.UpdateAssetStatus(id.String(), 2)
