@@ -54,14 +54,17 @@ func GetTotalPixels(duration int) int {
 
 // CalculateTranscodingCost computes the transcoding cost
 // of a video in wei and returns it.
-func CalculateTranscodingCost(fileName string) (string, error) {
+func CalculateTranscodingCost(fileName string) (*big.Int, error) {
+	// var transcodingCostEstimated uint64
+	transcodingCostEstimated := new(big.Int)
+
 	stdout, err := exec.Command("ffprobe", "-i", fileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
 	if err != nil {
-		return "", fmt.Errorf("finding video duration: %s", err)
+		return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
 	}
 	duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
 	if err != nil {
-		return "", fmt.Errorf("finding video duration: %s", err)
+		return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
 	}
 
 	// Fetch orchestrator stats from livepeer pricing tool:
@@ -69,7 +72,7 @@ func CalculateTranscodingCost(fileName string) (string, error) {
 
 	livepeerPricingToolURL, livepeerPricingToolURLExists := os.LookupEnv("LIVEPEER_PRICING_TOOL")
 	if !livepeerPricingToolURLExists {
-		return "", fmt.Errorf("`LIVEPEER_PRICING_TOOL` env variable not provided")
+		return transcodingCostEstimated, fmt.Errorf("`LIVEPEER_PRICING_TOOL` env variable not provided")
 	}
 
 	var orchestratorStats string
@@ -81,19 +84,19 @@ func CalculateTranscodingCost(fileName string) (string, error) {
 
 	resp, err := http.Get(orchestratorStats)
 	if err != nil {
-		return "", fmt.Errorf("couldn't fetch orchestrator stats: %s", err)
+		return transcodingCostEstimated, fmt.Errorf("couldn't fetch orchestrator stats: %s", err)
 	}
 
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("reading the orchestrator stats: %s", err)
+		return transcodingCostEstimated, fmt.Errorf("reading the orchestrator stats: %s", err)
 	}
 
 	orchStats, err := GetOrchestratorStats([]byte(body))
 	if err != nil {
-		return "", fmt.Errorf("getting the orchestrator stats: %s", err)
+		return transcodingCostEstimated, fmt.Errorf("getting the orchestrator stats: %s", err)
 	}
 
 	weightSum := big.NewInt(0)
@@ -121,7 +124,9 @@ func CalculateTranscodingCost(fileName string) (string, error) {
 	livepeerPrice = livepeerPrice.Mul(new(big.Float).SetInt(big.NewInt(int64(pixels))), pricePerPixel)
 
 	// Transcoding cost of the video in wei
-	transcodingCostWEI := livepeerPrice.String()
+	livepeerPrice.Int(transcodingCostEstimated) // store converted number in result
+	// transcodingCostEstimated = uint64(livepeerPrice)
+	fmt.Println("livepeer transcodingCostEstimated", transcodingCostEstimated)
 
-	return transcodingCostWEI, nil
+	return transcodingCostEstimated, nil
 }

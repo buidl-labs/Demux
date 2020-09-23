@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -47,9 +48,9 @@ func RunPoller() {
 			fmt.Println("Pending storage deals:")
 			fmt.Println(deals)
 			for _, deal := range deals {
-				fmt.Println("dealjid", deal.JID)
+				fmt.Println("dealjid", deal.JobID)
 				cidcorrtype, _ := cid.Decode(deal.CID)
-				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JID), cidcorrtype, deal)
+				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JobID), cidcorrtype, deal)
 				fmt.Println("pollprog", b, s, err)
 			}
 		}
@@ -59,7 +60,7 @@ func RunPoller() {
 func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs.JobID, mycid cid.Cid, storageDeal model.StorageDeal) (bool, string, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ctx = context.WithValue(ctx, powc.AuthKey, storageDeal.Token)
+	ctx = context.WithValue(ctx, powc.AuthKey, storageDeal.FFSToken)
 	ch := make(chan powc.JobEvent, 1)
 
 	if err := pgClient.FFS.WatchJobs(ctx, ch, jid); err != nil {
@@ -97,11 +98,10 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 	// Step 2: On success, save Deal data in the underlying Bucket thread. On
 	// failure save the error message. Also update status on Mongo for the archive.
 	if job.Status == ffs.Success {
-		err := saveDealsInDB(ctx, pgClient, storageDeal.Token, mycid)
+		err := saveDealsInDB(ctx, pgClient, storageDeal.FFSToken, mycid)
 		if err != nil {
 			return true, fmt.Sprintf("saving deal data in archive: %s", err), nil
 		}
-		dataservice.UpdateStorageDealStatus(fmt.Sprintf("%s", mycid), 1)
 	}
 
 	msg := "reached final status"
@@ -125,7 +125,9 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 	if len(proposals) > 0 {
 		for _, prop := range proposals {
 			priceAttoFIL := prop.EpochPrice * uint64(prop.Duration)
+			priceAttoFILBigInt := new(big.Int).SetUint64(priceAttoFIL)
 			priceFIL := float64(priceAttoFIL) * math.Pow(10, -18)
+			fmt.Println(priceFIL)
 			fmt.Println("***********************")
 			fmt.Println("ProposalCid", prop.ProposalCid)
 			fmt.Println("Renewed", prop.Renewed)
@@ -135,7 +137,7 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 			fmt.Println("Duration", prop.Duration)
 			fmt.Println("EpochPrice", prop.EpochPrice)
 
-			dataservice.UpdateStorageDeal(c.String(), priceFIL, 0, prop.Miner)
+			dataservice.UpdateStorageDeal(c.String(), 1, "Stored in Filecoin", prop.Miner, priceAttoFILBigInt.String(), 0)
 		}
 	}
 
