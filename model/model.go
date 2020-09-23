@@ -2,36 +2,31 @@ package model
 
 // Asset is the entity (video) which is uploaded by the user.
 type Asset struct {
-	AssetID         string  `json:"AssetID"`
-	AssetName       string  `json:"AssetName"`
-	AssetStatus     int     `json:"AssetStatus"`
-	TranscodingCost string  `json:"TranscodingCost"`
-	Miner           string  `json:"Miner"`
-	StorageCost     float64 `json:"Cost"`
-	Expiry          uint32  `json:"Expiry"`
-	Error           string  `json:"Error"`
-	HttpStatusCode  int     `json:"HttpStatusCode"`
-	StreamURL       string  `json:"StreamURL"`
+	AssetID         string `json:"AssetID"`
+	AssetStatusCode uint32 `json:"AssetStatusCode"`
+	AssetStatus     string `json:"AssetStatus"`
+	AssetError      bool   `json:"AssetError"`
+	StreamURL       string `json:"StreamURL"`
+	CreatedAt       int64  `json:"CreatedAt"`
 }
 
 // TranscodingDeal is the type binding for a transcoding deal in the livepeer network.
 type TranscodingDeal struct {
-	TranscodingID   string `json:"TranscodingID"`
-	TranscodingCost string `json:"TranscodingCost"`
-	Directory       string `json:"Directory"`
-	StorageStatus   bool   `json:"StorageStatus"`
+	AssetID                  string `json:"AssetID"`
+	TranscodingCost          string `json:"TranscodingCost"`
+	TranscodingCostEstimated string `json:"TranscodingCostEstimated"`
 }
 
-// StorageDeal is the type binding for a storage deal in the filecoin network.
+// StorageDeal is the type binding for a storage deal in the IPFS/filecoin network.
 type StorageDeal struct {
-	CID           string  `json:"CID"`
-	Name          string  `json:"Name"`
-	AssetID       string  `json:"AssetID"`
-	Miner         string  `json:"Miner"`
-	StorageCost   float64 `json:"Cost"`
-	Expiry        uint32  `json:"Expiry"`
-	TranscodingID string  `json:"TranscodingID"`
-	Token         string  `json:"Token"`
-	JID           string  `json:"JID"`
-	Status        uint32  `json:"Status"`
+	AssetID              string `json:"AssetID"`
+	StorageStatusCode    uint32 `json:"StorageStatusCode"`
+	StorageStatus        string `json:"StorageStatus"`
+	CID                  string `json:"CID"`
+	Miner                string `json:"Miner"`
+	StorageCost          string `json:"StorageCost"`
+	StorageCostEstimated string `json:"StorageCostEstimated"`
+	FilecoinDealExpiry   int64  `json:"FilecoinDealExpiry"`
+	FFSToken             string `json:"FFSToken"`
+	JobID                string `json:"JobID"`
 }

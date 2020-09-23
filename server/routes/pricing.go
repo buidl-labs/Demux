@@ -1,9 +1,8 @@
 package routes
 
 import (
-	"fmt"
 	"io"
-	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,7 +11,9 @@ import (
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
+
 	guuid "github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 // PriceEstimateHandler handles the /pricing endpoint
@@ -35,11 +36,15 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		videoFileSize := handler.Size
+		log.Println("videoFileSize:", videoFileSize)
+
 		defer clientFile.Close()
 
 		ss := strings.Split(handler.Filename, ".")
 
 		if ss[len(ss)-1] != "mp4" {
+			log.Println("not mp4")
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			data := map[string]interface{}{
 				"Error": "Please upload an mp4 file",
@@ -49,19 +54,19 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Generate a new assetID and create asset.
-
+		// Generate a new assetID.
 		id := guuid.New()
-		dataservice.CreateAsset(model.Asset{
-			AssetID:     id.String(),
-			AssetName:   handler.Filename,
-			AssetStatus: 0,
-		})
 
 		cmd := exec.Command("mkdir", "./assets/"+id.String())
 		stdout, err := cmd.Output()
 		if err != nil {
 			log.Println(err)
+			w.WriteHeader(http.StatusFailedDependency)
+			data := map[string]interface{}{
+				"Error": "could not create asset",
+			}
+			util.WriteResponse(data, w)
+			responded = true
 			return
 		}
 		_ = stdout
@@ -69,28 +74,75 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		f, err := os.OpenFile("./assets/"+id.String()+"/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			log.Println(err)
+			w.WriteHeader(http.StatusFailedDependency)
+			data := map[string]interface{}{
+				"Error": "could not create asset",
+			}
+			util.WriteResponse(data, w)
+			responded = true
 			return
 		}
 		demuxFileName := f.Name()
 		defer f.Close()
-		io.Copy(f, clientFile) // copy file to demux server
+		_, err = io.Copy(f, clientFile) // copy file to demux server
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusFailedDependency)
+			data := map[string]interface{}{
+				"Error": "could not create asset",
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
+		}
+		// Create a new asset.
+		dataservice.CreateAsset(model.Asset{
+			AssetID:         id.String(),
+			AssetStatusCode: 0,
+			AssetStatus:     "Video uploaded to API successfully",
+			AssetError:      false,
+		})
 
 		transcodingCostWEI, err := util.CalculateTranscodingCost(demuxFileName)
 		if err != nil {
 			// TODO: handle this case
-			dataservice.SetAssetError(id.String(), fmt.Sprintf("calculating transcoding cost: %s", err), http.StatusFailedDependency)
-			responded = true
-			return
+			log.Println(err)
+			transcodingCostWEI = big.NewInt(0)
+			// w.WriteHeader(http.StatusFailedDependency)
+			// data := map[string]interface{}{
+			// 	"Error": "could not estimate transcoding cost",
+			// }
+			// util.WriteResponse(data, w)
+			// responded = true
+			// return
 		}
 
 		// TODO: Calculate powergate (filecoin) storage price
+
+		// ctx, cancel := context.WithCancel(context.Background())
+		// defer cancel()
+		// pgClient, _ := powc.NewClient(util.InitialPowergateSetup.PowergateAddr)
+		// defer func() {
+		// 	if err := pgClient.Close(); err != nil {
+		// 		log.Errorf("closing powergate client: %s", err)
+		// 	}
+		// }()
+
+		// index, err := pgClient.Asks.Get(ctx)
+		// if err != nil {
+		// 	log.Errorf("getting asks: %s", err)
+		// }
+		// if len(index.Storage) > 0 {
+		// 	log.Printf("Storage median price: %v\n", index.StorageMedianPrice)
+		// 	log.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
+		// }
 
 		// TODO: Convert total price to USD and return
 
 		if responded == false {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
-				"TranscodingCostWEI": transcodingCostWEI,
+				"TranscodingCostEstimated": transcodingCostWEI,
 			}
 			util.WriteResponse(data, w)
 		}
