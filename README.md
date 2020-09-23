@@ -36,7 +36,7 @@ A gateway to facilitate a decentralised streaming ecosystem.
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/assets -F inputfile=@/Users/johndoe/hello.mp4
+  $ curl http://localhost:8000/asset -F inputfile=@/Users/johndoe/hello.mp4
   ```
 
   Sample response:
@@ -47,14 +47,14 @@ A gateway to facilitate a decentralised streaming ecosystem.
   }
   ```
 
-- **`GET /assets/<asset_id>`**
+- **`GET /asset/<asset_id>`**
 
   This endpoint gives us the status of an asset (uploaded video) in the pipeline.
 
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/assets/fba8cda5-6c71-46d7-ac15-28424343c037
+  $ curl http://localhost:8000/asset/fba8cda5-6c71-46d7-ac15-28424343c037
   ```
 
   Sample response:
@@ -71,9 +71,21 @@ A gateway to facilitate a decentralised streaming ecosystem.
     "StreamURL": "https://gateway.pinata.cloud/ipfs/bafybeiew6zbs4ljg37phxr3ejt5ydci2ir4nkcbuqdkxctvzyip6hb7one/root.m3u8",
     "TranscodingCost": "2.838960491e+13"
   }
+  {
+    "AssetError": false,
+    "AssetID": "e577d3eb-cdf4-441b-86f5-18c33f04e194",
+    "AssetStatus": "Pinned to IPFS. Attempting to store in Filecoin",
+    "AssetStatusCode": 3,
+    "CreatedAt": 1600878646,
+    "StorageCost": 0,
+    "StorageCostEstimated": 0,
+    "StreamURL": "https://gateway.pinata.cloud/ipfs/bafybeifk2jo77ugacrgni4r4iyoju4kl5qtwxuv2fsm67o2vcse2sjvux4/root.m3u8",
+    "TranscodingCost": 0,
+    "TranscodingCostEstimated": 28389604913585
+  }
   ```
 
 ## Requirements
 
-- go 1.14.4
+- go 1.15.2
 - ffmpeg
