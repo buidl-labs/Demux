@@ -85,7 +85,7 @@ func InitDB() {
 			TokenID       TEXT,
 			Digest        TEXT PRIMARY KEY,
 			AssetCount    INT,
-			CreatedAt     INT
+			CreatedAt     DATETIME DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 
