@@ -24,3 +24,5 @@ livepeer
 .idea/
 main
 .env
+user
+user.go
