@@ -1,12 +1,14 @@
 package routes
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net/http"
@@ -14,7 +16,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
@@ -237,6 +241,119 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				// dataservice.UpdateAssetStatus(id.String(), 2, "Calculating transcoding cost", false)
 			}
+
+			items, err := ioutil.ReadDir("./assets/" + id.String())
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			for _, f := range items {
+				fmt.Println(f.Name())
+				if f.IsDir() {
+					fmt.Println("dirName", f.Name())
+					resos := [4]string{"source", "1080p", "720p", "360p"}
+
+					var pWg sync.WaitGroup
+					pWg.Add(4)
+					for _, res := range resos {
+						go func(res string) {
+							segments, err := ioutil.ReadDir("./assets/" + id.String() + "/" + f.Name() + "/" + res)
+							if err != nil {
+								log.Println(err)
+								return
+							}
+							fmt.Println("segmentsLength", len(segments))
+							if len(segments) > 6 {
+								durations := make([]string, len(segments))
+								durSum := float64(0)
+
+								for i, seg := range segments {
+									segName := seg.Name()
+									fmt.Println("segName", segName)
+
+									stdout, err := exec.Command("ffprobe", "-i", "./assets/"+id.String()+"/"+f.Name()+"/"+res+"/"+segName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
+									if err != nil {
+										log.Println(err)
+										return
+									}
+									duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
+									if err != nil {
+										log.Println(err)
+										return
+									}
+									fmt.Println("duree", duration)
+									durSum += duration
+									durations[i] = fmt.Sprintf("%.3f", duration)
+								}
+								fmt.Println("durs", durations)
+								fmt.Println("total", durSum, int(durSum))
+								var m3u8str strings.Builder
+								m3u8str.WriteString("#EXTM3U\n" +
+									"#EXT-X-VERSION:3\n" +
+									"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
+									"#EXT-X-MEDIA-SEQUENCE:0\n")
+								for i, dur := range durations {
+									m3u8str.WriteString("#EXTINF:" + dur + ",\n" +
+										res + "/" + strconv.Itoa(i) + ".ts\n")
+								}
+								m3u8str.WriteString("#EXT-X-ENDLIST\n")
+								// txt := "#EXTM3U\n" +
+								// 	"#EXT-X-VERSION:3\n" +
+								// 	"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
+								// 	"#EXT-X-MEDIA-SEQUENCE:0\n" +
+								// 	"#EXTINF:" + fmt.Sprintf("%.6f", durSum) + ",\n" +
+								// 	"myvid0.ts\n" +
+								// 	"#EXT-X-ENDLIST\n"
+								// fmt.Println(txt)
+								fmt.Println("m3u8str", m3u8str.String())
+
+								m3u8strFile, err := os.Create("./assets/" + id.String() + "/" + f.Name() + "/" + res + ".m3u8")
+								bWriter := bufio.NewWriter(m3u8strFile)
+								n, err := bWriter.WriteString(m3u8str.String())
+								if err != nil {
+									log.Println(err)
+									return
+								}
+								log.Println("created the internal m3u8 file")
+								log.Printf("Wrote %d bytes\n", n)
+								bWriter.Flush()
+
+							}
+							pWg.Done()
+						}(res)
+					}
+					pWg.Wait()
+				}
+			}
+			// pattern := "./assets/" + id.String() + "/*"
+			// matches, err := filepath.Glob(pattern)
+			// if err != nil {
+			// 	log.Println(err)
+			// 	// Set AssetError to true
+			// 	dataservice.UpdateAssetStatus(id.String(), 2, "Attempting to pin to IPFS", true)
+			// 	return
+			// }
+			// if len(matches) == 2 {
+			// 	fmt.Println("matchesm3u8", matches)
+			// 	renameCmd := exec.Command("cp", matches[0], "./assets/"+id.String()+"/root.m3u8")
+			// 	stdout, err := renameCmd.Output()
+			// 	if err != nil {
+			// 		log.Println(err)
+			// 		// Set AssetError to true
+			// 		dataservice.UpdateAssetStatus(id.String(), 2, "Attempting to pin to IPFS", true)
+			// 		return
+			// 	}
+			// 	_ = stdout
+			// }
+
+			// stdout, err := exec.Command("ffprobe", "-i", "./assets/"+id.String(), "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
+			// if err != nil {
+			// 	return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
+			// }
+			// duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
+			// if err != nil {
+			// 	return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
+			// }
 
 			// Calculate transcoding cost of the video.
 
