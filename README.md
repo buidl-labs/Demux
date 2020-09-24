@@ -36,7 +36,7 @@ A gateway to facilitate a decentralised streaming ecosystem.
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/asset -F inputfile=@/Users/johndoe/hello.mp4
+  $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -F inputfile=@/Users/johndoe/hello.mp4
   ```
 
   Sample response:
@@ -60,17 +60,6 @@ A gateway to facilitate a decentralised streaming ecosystem.
   Sample response:
 
   ```json
-  {
-    "AssetID": "fba8cda5-6c71-46d7-ac15-28424343c037",
-    "AssetStatus": 3,
-    "CID": "bafybeiew6zbs4ljg37phxr3ejt5ydci2ir4nkcbuqdkxctvzyip6hb7one",
-    "Expiry": 0,
-    "Miner": "t01000",
-    "Status": "Completed Filecoin storage deal",
-    "StorageCost": 0.000001019146484375,
-    "StreamURL": "https://gateway.pinata.cloud/ipfs/bafybeiew6zbs4ljg37phxr3ejt5ydci2ir4nkcbuqdkxctvzyip6hb7one/root.m3u8",
-    "TranscodingCost": "2.838960491e+13"
-  }
   {
     "AssetError": false,
     "AssetID": "e577d3eb-cdf4-441b-86f5-18c33f04e194",
