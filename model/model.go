@@ -30,3 +30,14 @@ type StorageDeal struct {
 	FFSToken             string `json:"FFSToken"`
 	JobID                string `json:"JobID"`
 }
+
+// User is the type binding for HTTP Basic Authentication.
+type User struct {
+	Name       string `json:"Name"`
+	TokenID    string `json:"TokenID"`
+	Digest     string `json:"Digest"`
+	AssetCount uint64 `json:"AssetCount"`
+	CreatedAt  int64  `json:"CreatedAt"`
+}
+
+// Password   string `json:"Password"`

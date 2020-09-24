@@ -79,6 +79,24 @@ func InitDB() {
 		log.Fatalln("Error in creating DB", err)
 	}
 
+	statement, err = database.Prepare(`
+		CREATE TABLE IF NOT EXISTS User (
+			Name          TEXT,
+			TokenID       TEXT,
+			Digest        TEXT PRIMARY KEY,
+			AssetCount    INT,
+			CreatedAt     INT
+		)
+	`)
+
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+	_, err = statement.Exec()
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+
 	log.Info("DB created successfully.")
 }
 
@@ -243,6 +261,51 @@ func UpdateStreamURL(assetID string, streamURL string) {
 	_, err = statement.Exec(streamURL, assetID)
 	if err != nil {
 		log.Println("Error in updating streamURL for asset", assetID)
+		log.Println(err)
+	}
+}
+
+// CreateUser creates a new user.
+func CreateUser(x model.User) {
+	statement, err := sqldb.Prepare("INSERT INTO User (Name, TokenID, Digest, AssetCount, CreatedAt) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		log.Println("Error in inserting User", x.Name)
+		log.Println(err)
+	}
+	_, err = statement.Exec(x.Name, x.TokenID, x.Digest, x.AssetCount, x.CreatedAt)
+	if err != nil {
+		log.Println("Error in inserting User", x.Name)
+		log.Println(err)
+	}
+}
+
+// IfUserExists checks whether a user having a given digest exists in the database.
+func IfUserExists(digest string) bool {
+	count := 0
+	rows, err := sqldb.Query("SELECT * FROM User WHERE Digest=?", digest)
+	if err != nil {
+		log.Println("Error in checking existence of user", digest)
+		log.Println(err)
+	}
+	for rows.Next() {
+		count++
+	}
+	if count == 0 {
+		return false
+	}
+	return true
+}
+
+// IncrementUserAssetCount increments a user's AssetCount by 1.
+func IncrementUserAssetCount(digest string) {
+	statement, err := sqldb.Prepare("UPDATE User SET AssetCount = AssetCount + 1 WHERE Digest=?")
+	if err != nil {
+		log.Println("Error in updating assetCount for user", digest)
+		log.Println(err)
+	}
+	_, err = statement.Exec(digest)
+	if err != nil {
+		log.Println("Error in updating assetCount for user", digest)
 		log.Println(err)
 	}
 }

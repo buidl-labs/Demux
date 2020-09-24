@@ -3,6 +3,8 @@ package routes
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -28,6 +30,36 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 
 		var responded = false
+
+		tokenID, tokenSecret, ok := r.BasicAuth()
+		fmt.Println("sent", "tokenID:", tokenID, "\ntokenSecret:", tokenSecret)
+		fmt.Println("ok", ok)
+		if ok {
+			sha256Digest := sha256.Sum256([]byte(tokenID + ":" + tokenSecret))
+			sha256DigestStr := hex.EncodeToString(sha256Digest[:])
+			fmt.Println("now", sha256DigestStr)
+			if dataservice.IfUserExists(sha256DigestStr) {
+				fmt.Println("AssetCount++")
+				dataservice.IncrementUserAssetCount(sha256DigestStr)
+			} else {
+				w.WriteHeader(http.StatusUnauthorized)
+				data := map[string]interface{}{
+					"Error": "please use a valid TOKEN_ID and TOKEN_SECRET",
+				}
+				util.WriteResponse(data, w)
+				responded = true
+				return
+			}
+		} else {
+			fmt.Println("not ok")
+			w.WriteHeader(http.StatusUnauthorized)
+			data := map[string]interface{}{
+				"Error": "please use a valid TOKEN_ID and TOKEN_SECRET",
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
+		}
 
 		// TODO: handle the case when a remote file is sent
 		// example: https://file-examples-com.github.io/uploads/2017/04/file_example_MP4_1280_10MG.mp4
