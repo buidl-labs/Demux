@@ -22,9 +22,9 @@ func StartServer(serverPort string) {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/", HomeHandler).Methods("GET")
-	router.HandleFunc("/asset", routes.AssetsHandler).Methods("POST")
-	router.HandleFunc("/asset/{asset_id}", routes.AssetsStatusHandler).Methods("GET")
+	router.HandleFunc("/asset/{asset_id}", routes.AssetStatusHandler).Methods("GET")
 	router.HandleFunc("/pricing", routes.PriceEstimateHandler).Methods("POST")
+	router.HandleFunc("/upload", routes.UploadsHandler).Methods("POST")
 
 	log.Infoln("Starting server at PORT", serverPort)
 	log.Fatalln("Error in starting server", http.ListenAndServe(serverPort, handlers.CORS()(router)))

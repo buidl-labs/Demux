@@ -1,12 +1,13 @@
 package util
 
 import (
-	guuid "github.com/google/uuid"
 	"os/exec"
+
+	"github.com/google/uuid"
 )
 
 // CreateSegments creates segments of a transcoded video using ffmpeg
-func CreateSegments(filename string, resolution string, id guuid.UUID) (bool, error) {
+func CreateSegments(filename string, resolution string, id uuid.UUID) (bool, error) {
 	success := false
 
 	cmd := exec.Command(

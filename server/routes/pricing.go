@@ -12,7 +12,7 @@ import (
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
 
-	guuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -29,7 +29,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			data := map[string]interface{}{
-				"Error": "Please upload a file of size less than 30MB",
+				"error": "please upload a file of size less than 30MB",
 			}
 			util.WriteResponse(data, w)
 			responded = true
@@ -47,7 +47,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("not mp4")
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			data := map[string]interface{}{
-				"Error": "Please upload an mp4 file",
+				"error": "please upload an mp4 file",
 			}
 			util.WriteResponse(data, w)
 			responded = true
@@ -55,7 +55,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Generate a new assetID.
-		id := guuid.New()
+		id := uuid.New()
 
 		cmd := exec.Command("mkdir", "./assets/"+id.String())
 		stdout, err := cmd.Output()
@@ -63,7 +63,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 			w.WriteHeader(http.StatusFailedDependency)
 			data := map[string]interface{}{
-				"Error": "could not create asset",
+				"error": "could not create asset",
 			}
 			util.WriteResponse(data, w)
 			responded = true
@@ -76,7 +76,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 			w.WriteHeader(http.StatusFailedDependency)
 			data := map[string]interface{}{
-				"Error": "could not create asset",
+				"error": "could not create asset",
 			}
 			util.WriteResponse(data, w)
 			responded = true
@@ -89,7 +89,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 			w.WriteHeader(http.StatusFailedDependency)
 			data := map[string]interface{}{
-				"Error": "could not create asset",
+				"error": "could not create asset",
 			}
 			util.WriteResponse(data, w)
 			responded = true
@@ -99,7 +99,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		dataservice.CreateAsset(model.Asset{
 			AssetID:         id.String(),
 			AssetStatusCode: 0,
-			AssetStatus:     "Video uploaded to API successfully",
+			AssetStatus:     "video uploaded successfully",
 			AssetError:      false,
 		})
 
@@ -142,7 +142,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		if responded == false {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
-				"TranscodingCostEstimated": transcodingCostWEI,
+				"transcoding_cost_estimated": transcodingCostWEI,
 			}
 			util.WriteResponse(data, w)
 		}
