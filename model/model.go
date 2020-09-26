@@ -3,6 +3,7 @@ package model
 // Asset is the entity (video) which is uploaded by the user.
 type Asset struct {
 	AssetID         string `json:"AssetID"`
+	AssetReady      bool   `json:"AssetReady"`
 	AssetStatusCode uint32 `json:"AssetStatusCode"`
 	AssetStatus     string `json:"AssetStatus"`
 	AssetError      bool   `json:"AssetError"`

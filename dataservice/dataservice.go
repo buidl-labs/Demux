@@ -24,6 +24,7 @@ func InitDB() {
 	statement, err := database.Prepare(`
 		CREATE TABLE IF NOT EXISTS Asset (
 			AssetID                  TEXT PRIMARY KEY,
+			AssetReady               BOOLEAN,
 			AssetStatusCode          INT,
 			AssetStatus              TEXT,
 			AssetError               BOOLEAN,
@@ -102,12 +103,12 @@ func InitDB() {
 
 // CreateAsset creates a new asset.
 func CreateAsset(x model.Asset) {
-	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetStatusCode, AssetStatus, AssetError, StreamURL, CreatedAt) VALUES (?, ?, ?, ?, ?, ?)")
+	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetReady, AssetStatusCode, AssetStatus, AssetError, StreamURL, CreatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		log.Println("Error in inserting Asset", x.AssetID)
 		log.Println(err)
 	}
-	_, err = statement.Exec(x.AssetID, x.AssetStatusCode, x.AssetStatus, x.AssetError, x.StreamURL, x.CreatedAt)
+	_, err = statement.Exec(x.AssetID, x.AssetReady, x.AssetStatusCode, x.AssetStatus, x.AssetError, x.StreamURL, x.CreatedAt)
 	if err != nil {
 		log.Println("Error in inserting Asset", x.AssetID)
 		log.Println(err)
@@ -183,7 +184,7 @@ func GetAsset(assetID string) model.Asset {
 	var data []model.Asset
 	x := model.Asset{}
 	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetStatusCode, &x.AssetStatus, &x.AssetError, &x.StreamURL, &x.CreatedAt)
+		rows.Scan(&x.AssetID, &x.AssetReady, &x.AssetStatusCode, &x.AssetStatus, &x.AssetError, &x.StreamURL, &x.CreatedAt)
 		data = append(data, x)
 	}
 	return x
@@ -306,6 +307,20 @@ func IncrementUserAssetCount(digest string) {
 	_, err = statement.Exec(digest)
 	if err != nil {
 		log.Println("Error in updating assetCount for user", digest)
+		log.Println(err)
+	}
+}
+
+// UpdateAssetReady updates the "ready" state of an asset.
+func UpdateAssetReady(assetID string, assetReady bool) {
+	statement, err := sqldb.Prepare("UPDATE Asset SET AssetReady=? WHERE AssetID=?")
+	if err != nil {
+		log.Println("Error in updating asset", assetID)
+		log.Println(err)
+	}
+	_, err = statement.Exec(assetReady, assetID)
+	if err != nil {
+		log.Println("Error in updating asset", assetID)
 		log.Println(err)
 	}
 }

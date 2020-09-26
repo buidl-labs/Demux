@@ -143,6 +143,7 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 		// Create a new asset.
 		dataservice.CreateAsset(model.Asset{
 			AssetID:         id.String(),
+			AssetReady:      false,
 			AssetStatusCode: 0,
 			AssetStatus:     "Video uploaded to API successfully",
 			AssetError:      false,
@@ -616,6 +617,9 @@ func AssetsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// Set AssetStatus to 3 (Pinned to IPFS. Attempting to store in Filecoin)
 			dataservice.UpdateAssetStatus(id.String(), 3, "Pinned to IPFS. Attempting to store in Filecoin", false)
+
+			// Set AssetReady to true
+			dataservice.UpdateAssetReady(id.String(), true)
 		}()
 
 		if responded == false {
@@ -642,6 +646,7 @@ func AssetsStatusHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
 				"AssetID":         asset.AssetID,
+				"AssetReady":      asset.AssetReady,
 				"AssetStatusCode": asset.AssetStatusCode,
 				"AssetStatus":     asset.AssetStatus,
 				"AssetError":      asset.AssetError,
