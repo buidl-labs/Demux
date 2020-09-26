@@ -223,7 +223,7 @@ func GetStorageDeal(assetID string) model.StorageDeal {
 
 // GetPendingDeals returns the pending storage deals.
 func GetPendingDeals() []model.StorageDeal {
-	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE StorageStatus=?", 0)
+	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE StorageStatusCode=?", 0)
 	if err != nil {
 		log.Println("Error in getting asset")
 		log.Println(err)
