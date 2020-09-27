@@ -19,14 +19,14 @@ A gateway to facilitate a decentralised streaming ecosystem.
 
 ## API Endpoints
 
-- **`POST /asset`**
+- **`POST /upload`**
 
   This is used to upload a video for streaming.
 
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -F input_file=@/Users/johndoe/hello.mp4
+  $ curl http://localhost:8000/upload -u <TOKEN_ID>:<TOKEN_SECRET> -F input_file=@/Users/johndoe/hello.mp4
   ```
 
   Sample response:
