@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 RUN go build cmd/main.go
 
-RUN wget https://github.com/rajdeepbharati/go-livepeer/releases/download/v0.5-demux-2/livepeer -P ./livepeerPull/linux
+RUN wget https://github.com/rajdeepbharati/go-livepeer/releases/download/v0.5.10-demux.1/livepeer -P ./livepeerPull/linux
 RUN chmod +x ./livepeerPull/linux/livepeer
 
 ENV IPFS_GATEWAY=${IPFS_GATEWAY}
