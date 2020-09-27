@@ -596,8 +596,8 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 
 			var currCID cid.Cid
 			var streamURL string
-			var pinataIpfsGateway = "https://gateway.pinata.cloud/ipfs/"
-			var ipfsioGateway = "https://ipfs.io/ipfs/"
+			// var pinataIpfsGateway = "https://gateway.pinata.cloud/ipfs/"
+			// var ipfsioGateway = "https://ipfs.io/ipfs/"
 			var ipfsGateway = os.Getenv("IPFS_GATEWAY")
 			var jid string
 			var currFolderName string
@@ -610,18 +610,18 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 				log.Println(err)
 				if staged {
 					currCIDStr := fmt.Sprintf("%s", currCID)
-					pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
-					if pinataErr != nil {
-						// dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
-						// return
-					}
-					if pinataCID == currCIDStr {
-						fmt.Println("EQ")
-						streamURL = pinataIpfsGateway + pinataCID
-					} else {
-						fmt.Println("NOTEQ", pinataCID, currCIDStr)
-						streamURL = ipfsioGateway + currCIDStr
-					}
+					// pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
+					// if pinataErr != nil {
+					// 	// dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
+					// 	// return
+					// }
+					// if pinataCID == currCIDStr {
+					// 	fmt.Println("EQ")
+					// 	streamURL = pinataIpfsGateway + pinataCID
+					// } else {
+					// 	fmt.Println("NOTEQ", pinataCID, currCIDStr)
+					// 	streamURL = ipfsioGateway + currCIDStr
+					// }
 					streamURL = ipfsGateway + currCIDStr + "/root.m3u8"
 
 					dataservice.CreateStorageDeal(model.StorageDeal{
@@ -651,18 +651,18 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 
 			log.Printf("CID: %s, currFolderName: %s\n", currCID, currFolderName)
 			currCIDStr := fmt.Sprintf("%s", currCID)
-			pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
-			if pinataErr != nil {
-				// dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
-				// return
-			}
-			if pinataCID == currCIDStr {
-				fmt.Println("EQ")
-				streamURL = pinataIpfsGateway + pinataCID
-			} else {
-				fmt.Println("NOTEQ", pinataCID, currCIDStr)
-				streamURL = ipfsioGateway + currCIDStr
-			}
+			// pinataCID, pinataErr := util.PinFolder("assets/"+id.String(), "POW"+currCIDStr)
+			// if pinataErr != nil {
+			// 	// dataservice.SetAssetError(id.String(), fmt.Sprintf("pinning to pinata: %s", pinataErr), http.StatusFailedDependency)
+			// 	// return
+			// }
+			// if pinataCID == currCIDStr {
+			// 	fmt.Println("EQ")
+			// 	streamURL = pinataIpfsGateway + pinataCID
+			// } else {
+			// 	fmt.Println("NOTEQ", pinataCID, currCIDStr)
+			// 	streamURL = ipfsioGateway + currCIDStr
+			// }
 			streamURL = ipfsGateway + currCIDStr + "/root.m3u8"
 
 			dataservice.CreateStorageDeal(model.StorageDeal{
