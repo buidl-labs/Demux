@@ -17,16 +17,6 @@ A gateway to facilitate a decentralised streaming ecosystem.
 - Build the docker image: `docker build --tag demux:latest .`
 - Run Demux: `docker run -p 8000:8000 --env-file ./.env demux:latest`
 
-### Without Docker
-
-- Download the latest build of livepeer pull mode:
-  - linux: https://build.livepeer.live/0.5.10-32544624/livepeer-linux-amd64.tar.gz
-  - mac: https://build.livepeer.live/0.5.10-32544624/livepeer-darwin-amd64.tar.gz
-- Place the `livepeer` binary inside `Demux/livepeerPull/linux` or `Demux/livepeerPull/darwin` directory, depending on your OS.
-- Make sure you have golang and ffmpeg installed.
-- Set environment variables (sample present in `Demux/.env.sample`)
-- Run Demux: `make run`
-
 ## API Endpoints
 
 - **`POST /asset`**
