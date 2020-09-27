@@ -226,6 +226,8 @@ func run(ctx context.Context, c *client.Client, id int, size int64, addr string,
 				TrustedMiners:   trustedMiners,
 				Renew:           ffs.FilRenew{Enabled: false, Threshold: 0},
 				MaxPrice:        uint64(storagePrice),
+				FastRetrieval:   false,
+				DealStartOffset: 0,
 			},
 		},
 	}

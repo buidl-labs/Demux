@@ -102,6 +102,9 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 		if err != nil {
 			return true, fmt.Sprintf("saving deal data in archive: %s", err), nil
 		}
+	} else {
+		log.Println("job.Status", ffs.JobStatusStr[job.Status], job.Status)
+		dataservice.UpdateStorageDeal(mycid.String(), 2, "failed to create filecoin storage deal", "", "", 0)
 	}
 
 	msg := "reached final status"
@@ -137,7 +140,7 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 			fmt.Println("Duration", prop.Duration)
 			fmt.Println("EpochPrice", prop.EpochPrice)
 
-			dataservice.UpdateStorageDeal(c.String(), 1, "Stored in Filecoin", prop.Miner, priceAttoFILBigInt.String(), 0)
+			dataservice.UpdateStorageDeal(c.String(), 1, "stored in filecoin", prop.Miner, priceAttoFILBigInt.String(), 0)
 		}
 	}
 
