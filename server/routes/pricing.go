@@ -62,7 +62,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		// TODO: handle the case when a remote file is sent
 		// example: https://file-examples-com.github.io/uploads/2017/04/file_example_MP4_1280_10MG.mp4
 		r.Body = http.MaxBytesReader(w, r.Body, 30*1024*1024)
-		clientFile, handler, err := r.FormFile("inputfile")
+		clientFile, handler, err := r.FormFile("input_file")
 		if err != nil {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 			data := map[string]interface{}{

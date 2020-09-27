@@ -29,21 +29,21 @@ A gateway to facilitate a decentralised streaming ecosystem.
 
 ## API Endpoints
 
-- **`POST /assets`**
+- **`POST /asset`**
 
   This is used to upload a video for streaming.
 
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -F inputfile=@/Users/johndoe/hello.mp4
+  $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -F input_file=@/Users/johndoe/hello.mp4
   ```
 
   Sample response:
 
   ```json
   {
-    "AssetID": "fba8cda5-6c71-46d7-ac15-28424343c037"
+    "asset_id": "fba8cda5-6c71-46d7-ac15-28424343c037"
   }
   ```
 
@@ -61,16 +61,38 @@ A gateway to facilitate a decentralised streaming ecosystem.
 
   ```json
   {
-    "AssetError": false,
-    "AssetID": "e577d3eb-cdf4-441b-86f5-18c33f04e194",
-    "AssetStatus": "Pinned to IPFS. Attempting to store in Filecoin",
-    "AssetStatusCode": 3,
-    "CreatedAt": 1600878646,
-    "StorageCost": 0,
-    "StorageCostEstimated": 0,
-    "StreamURL": "https://gateway.pinata.cloud/ipfs/bafybeifk2jo77ugacrgni4r4iyoju4kl5qtwxuv2fsm67o2vcse2sjvux4/root.m3u8",
-    "TranscodingCost": 0,
-    "TranscodingCostEstimated": 28389604913585
+    "asset_error": false,
+    "asset_id": "595a040d-eb9c-4e71-97bc-ae2eba60fe61",
+    "asset_ready": true,
+    "asset_status": "pinned to ipfs, attempting to store in filecoin",
+    "asset_status_code": 3,
+    "created_at": 1601220874,
+    "storage_cost": 0,
+    "storage_cost_estimated": 6158801662122543,
+    "stream_url": "https://ipfs.io/ipfs/bafybeied3ahoc2wm752myjiamod6tzvyujvxtikpl2pcy2it4loyiu63ni/root.m3u8",
+    "transcoding_cost": 0,
+    "transcoding_cost_estimated": 28389604913585
+  }
+  ```
+
+- **`POST /pricing`**
+
+  This is used to calculate the price of transcoding and storage for a given video.
+  `storage_duration`: Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
+  `storage_cost_estimated` is in attoFIL and `transcoding_cost_estimated` is in WEI.
+
+  Sample request:
+
+  ```bash
+  $ curl http://localhost:8000/pricing -F input_file=@/Users/johndoe/hello.mp4 -F storage_duration=3000000
+  ```
+
+  Sample response:
+
+  ```json
+  {
+    "storage_cost_estimated": 5560825118337973,
+    "transcoding_cost_estimated": 107880498671623
   }
   ```
 

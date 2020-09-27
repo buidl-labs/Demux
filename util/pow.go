@@ -99,11 +99,7 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	var expiry int
 	var staged bool = false
 
-	// Create new ffs instance
-	_, tok, err := c.FFS.Create(ctx)
-	if err != nil {
-		return currCid, fName, minerName, tok, jid, storagePrice, expiry, staged, fmt.Errorf("creating ffs instance: %s", err)
-	}
+	tok := os.Getenv("POW_TOKEN")
 
 	log.Infof("ffs tok: [%s]\n", tok)
 

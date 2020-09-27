@@ -68,7 +68,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 		// TODO: handle the case when a remote file is sent
 		// example: https://file-examples-com.github.io/uploads/2017/04/file_example_MP4_1280_10MG.mp4
 		r.Body = http.MaxBytesReader(w, r.Body, 30*1024*1024)
-		clientFile, handler, err := r.FormFile("inputfile")
+		clientFile, handler, err := r.FormFile("input_file")
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
@@ -543,7 +543,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 			dataservice.UpdateMeanSizeRatio((ratio+currRatioSum)/float64(currCount+1), ratio+currRatioSum, currCount+1)
 
 			//************************* Compute estimated storage price
-			estimatedPriceStr := ""
+			// estimatedPriceStr := ""
 			estimatedPrice := uint64(0)
 			storageDurationInt := 31536000         // deal duration currently set to 1 year. 15768000-> 6 months
 			duration := uint64(storageDurationInt) //duration of deal in seconds (provided by user)
@@ -588,7 +588,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 				fmt.Println("meanEpochPrice", meanEpochPrice)
 				estimatedPrice = meanEpochPrice * epochs * folderSize / 1024
 				fmt.Println("estimatedPrice", estimatedPrice)
-				estimatedPriceStr = fmt.Sprintf("%f", estimatedPrice)
+				// estimatedPriceStr = fmt.Sprintf("%f", estimatedPrice)
 			}
 			//*************************
 
@@ -631,7 +631,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 						CID:                  currCIDStr,
 						Miner:                "",
 						StorageCost:          big.NewInt(0).String(),
-						StorageCostEstimated: estimatedPriceStr,
+						StorageCostEstimated: big.NewInt(int64(estimatedPrice)).String(),
 						FilecoinDealExpiry:   int64(0),
 						FFSToken:             tok,
 						JobID:                jid,
@@ -672,7 +672,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 				CID:                  currCIDStr,
 				Miner:                "",
 				StorageCost:          big.NewInt(0).String(),
-				StorageCostEstimated: estimatedPriceStr,
+				StorageCostEstimated: big.NewInt(int64(estimatedPrice)).String(),
 				FilecoinDealExpiry:   int64(0),
 				FFSToken:             tok,
 				JobID:                jid,
