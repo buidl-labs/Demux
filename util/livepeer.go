@@ -54,18 +54,21 @@ func GetTotalPixels(duration int) int {
 
 // CalculateTranscodingCost computes the transcoding cost
 // of a video in wei and returns it.
-func CalculateTranscodingCost(fileName string) (*big.Int, error) {
+func CalculateTranscodingCost(fileName string, duration float64) (*big.Int, error) {
 	// var transcodingCostEstimated uint64
 	transcodingCostEstimated := new(big.Int)
 
-	stdout, err := exec.Command("ffprobe", "-i", fileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
-	if err != nil {
-		return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
+	if duration == 0 && fileName != "" {
+		stdout, err := exec.Command("ffprobe", "-i", fileName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
+		if err != nil {
+			return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
+		}
+		duration, err = strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
+		if err != nil {
+			return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
+		}
 	}
-	duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
-	if err != nil {
-		return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
-	}
+	fmt.Println("fileName", fileName, "duration", duration)
 
 	// Fetch orchestrator stats from livepeer pricing tool:
 	// GET https://livepeer-pricing-tool.com/orchestratorStats

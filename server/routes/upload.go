@@ -360,7 +360,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 
 			// var transcodingCostEstimated uint64
 			transcodingCostEstimated := big.NewInt(0)
-			transcodingCostEstimated, err = util.CalculateTranscodingCost(demuxFileName)
+			transcodingCostEstimated, err = util.CalculateTranscodingCost(demuxFileName, float64(0))
 			if err != nil {
 				log.Println(err)
 				// Couldn't calculate transcoding cost. Set it to 0

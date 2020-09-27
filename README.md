@@ -67,22 +67,29 @@ A gateway to facilitate a decentralised streaming ecosystem.
 
 - **`POST /pricing`**
 
-  This is used to calculate the price of transcoding and storage for a given video.
-  `storage_duration`: Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
+  This is used to estimate the transcoding and storage cost for a given video.
+
+  Input data params:
+
+  - `video_duration`: Duration of the video in seconds. Its value must be greater than `0`.
+  - `video_file_size`: Size of the video in MiB (`1 MiB = 2^20 B`).
+  - `storage_duration`: Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
+
+  Output:
   `storage_cost_estimated` is in attoFIL and `transcoding_cost_estimated` is in WEI.
 
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/pricing -F input_file=@/Users/johndoe/hello.mp4 -F storage_duration=3000000
+  $ curl http://localhost:8000/pricing -d "{\"video_duration\":60, \"video_file_size\":28, \"storage_duration\":2628005}"
   ```
 
   Sample response:
 
   ```json
   {
-    "storage_cost_estimated": 5560825118337973,
-    "transcoding_cost_estimated": 107880498671623
+    "storage_cost_estimated": 1562410068450,
+    "transcoding_cost_estimated": 170337629481511
   }
   ```
 

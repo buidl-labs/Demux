@@ -2,30 +2,26 @@ package routes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
-	"os"
-	"os/exec"
 	"strconv"
-	"strings"
 
 	"github.com/buidl-labs/Demux/dataservice"
-	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
 
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	powc "github.com/textileio/powergate/api/client"
 	// "github.com/textileio/powergate/ffs"
 	// "github.com/textileio/powergate/health"
 )
 
-// type Data struct {
-// 	StorageDuration int64
-// 	VideoFileSize   int64
-// }
+type Data struct {
+	StorageDuration int64 `json:"storage_duration"`
+	VideoFileSize   int64 `json:"video_file_size"`
+	VideoDuration   int64 `json:"video_duration"`
+}
 
 // PriceEstimateHandler handles the /pricing endpoint
 func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
@@ -33,23 +29,22 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		var responded = false
 
-		// decoder := json.NewDecoder(r.Body)
-		// var d Data
-		// err := decoder.Decode(&d)
-		// if err != nil {
-		// 	// panic(err)
-		// 	fmt.Println(err)
-		// 	responded = true
-		// 	return
-		// }
-		// log.Println(d.StorageDuration)
-		// log.Println(d.VideoFileSize)
+		decoder := json.NewDecoder(r.Body)
+		var d Data
+		err := decoder.Decode(&d)
+		if err != nil {
+			fmt.Println(err)
+			responded = true
+			return
+		}
+		log.Println(d.StorageDuration)
+		log.Println(d.VideoFileSize)
+		log.Println(d.VideoDuration)
+		videoDurationInt := d.VideoDuration
+		storageDurationInt := d.StorageDuration
+		videoFileSize := uint64(d.VideoFileSize)
 
-		storageDuration := r.FormValue("storage_duration")
-		storageDurationInt, _ := strconv.ParseInt(storageDuration, 10, 64)
-		fmt.Println("storageDurationInt", storageDurationInt)
-		// 1 month <= storageDurationInt <= 10 years
-		if storageDurationInt > 315360000 || storageDurationInt < 2628003 {
+		if d.StorageDuration > 315360000 || d.StorageDuration < 2628003 {
 			w.WriteHeader(http.StatusExpectationFailed)
 			data := map[string]interface{}{
 				"error": "please specify a value of `storage_duration` between 2628003 and 315360000",
@@ -58,89 +53,68 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			responded = true
 			return
 		}
-
-		// TODO: handle the case when a remote file is sent
-		// example: https://file-examples-com.github.io/uploads/2017/04/file_example_MP4_1280_10MG.mp4
-		r.Body = http.MaxBytesReader(w, r.Body, 30*1024*1024)
-		clientFile, handler, err := r.FormFile("input_file")
-		if err != nil {
-			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		if d.VideoDuration < 1 {
+			w.WriteHeader(http.StatusExpectationFailed)
 			data := map[string]interface{}{
-				"error": "please upload a file of size less than 30MB",
+				"error": "please specify a value of `video_duration` >= 1",
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
+		}
+		if d.VideoFileSize <= 0 {
+			w.WriteHeader(http.StatusExpectationFailed)
+			data := map[string]interface{}{
+				"error": "please specify a value of `video_file_size` > 0",
 			}
 			util.WriteResponse(data, w)
 			responded = true
 			return
 		}
 
-		videoFileSize := uint64(handler.Size)
-		log.Println("videoFileSize:", videoFileSize)
+		// storageDuration := r.FormValue("storage_duration")
+		// storageDurationInt, _ := strconv.ParseInt(storageDuration, 10, 64)
+		// fmt.Println("storageDurationInt", storageDurationInt)
+		// // 1 month <= storageDurationInt <= 10 years
+		// if storageDurationInt > 315360000 || storageDurationInt < 2628003 {
+		// 	w.WriteHeader(http.StatusExpectationFailed)
+		// 	data := map[string]interface{}{
+		// 		"error": "please specify a value of `storage_duration` between 2628003 and 315360000",
+		// 	}
+		// 	util.WriteResponse(data, w)
+		// 	responded = true
+		// 	return
+		// }
 
-		defer clientFile.Close()
+		// videoDuration := r.FormValue("video_duration")
+		// videoDurationInt, _ := strconv.ParseInt(videoDuration, 10, 64)
+		// fmt.Println("videoDurationInt", videoDurationInt)
+		// if videoDurationInt < 1 {
+		// 	w.WriteHeader(http.StatusExpectationFailed)
+		// 	data := map[string]interface{}{
+		// 		"error": "please specify a value of `video_duration` >= 1",
+		// 	}
+		// 	util.WriteResponse(data, w)
+		// 	responded = true
+		// 	return
+		// }
 
-		ss := strings.Split(handler.Filename, ".")
+		// videoFileSizeStr := r.FormValue("video_file_size")
+		// videoFileSizeInt, _ := strconv.ParseInt(videoFileSizeStr, 10, 64)
+		// fmt.Println("videoFileSizeInt", videoFileSizeInt)
+		// if videoFileSizeInt <= 0 {
+		// 	w.WriteHeader(http.StatusExpectationFailed)
+		// 	data := map[string]interface{}{
+		// 		"error": "please specify a value of `video_file_size` > 0",
+		// 	}
+		// 	util.WriteResponse(data, w)
+		// 	responded = true
+		// 	return
+		// }
+		// videoFileSize := uint64(videoFileSizeInt)
+		// log.Println("videoFileSize:", videoFileSize)
 
-		if ss[len(ss)-1] != "mp4" {
-			log.Println("not mp4")
-			w.WriteHeader(http.StatusRequestEntityTooLarge)
-			data := map[string]interface{}{
-				"error": "please upload an mp4 file",
-			}
-			util.WriteResponse(data, w)
-			responded = true
-			return
-		}
-
-		// Generate a new assetID.
-		id := uuid.New()
-
-		cmd := exec.Command("mkdir", "./assets/"+id.String())
-		stdout, err := cmd.Output()
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusFailedDependency)
-			data := map[string]interface{}{
-				"error": "could not create asset",
-			}
-			util.WriteResponse(data, w)
-			responded = true
-			return
-		}
-		_ = stdout
-
-		f, err := os.OpenFile("./assets/"+id.String()+"/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusFailedDependency)
-			data := map[string]interface{}{
-				"error": "could not create asset",
-			}
-			util.WriteResponse(data, w)
-			responded = true
-			return
-		}
-		demuxFileName := f.Name()
-		defer f.Close()
-		_, err = io.Copy(f, clientFile) // copy file to demux server
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusFailedDependency)
-			data := map[string]interface{}{
-				"error": "could not create asset",
-			}
-			util.WriteResponse(data, w)
-			responded = true
-			return
-		}
-		// Create a new asset.
-		dataservice.CreateAsset(model.Asset{
-			AssetID:         id.String(),
-			AssetStatusCode: 0,
-			AssetStatus:     "video uploaded successfully",
-			AssetError:      false,
-		})
-
-		transcodingCostWEI, err := util.CalculateTranscodingCost(demuxFileName)
+		transcodingCostWEI, err := util.CalculateTranscodingCost("", float64(videoDurationInt))
 		if err != nil {
 			// TODO: handle this case
 			log.Println(err)
