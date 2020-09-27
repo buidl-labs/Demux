@@ -2,6 +2,7 @@ package dataservice
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/buidl-labs/Demux/model"
 
@@ -87,6 +88,39 @@ func InitDB() {
 			Digest        TEXT PRIMARY KEY,
 			AssetCount    INT,
 			CreatedAt     DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+	_, err = statement.Exec()
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+
+	statement, err = database.Prepare(`
+		CREATE TABLE IF NOT EXISTS SizeRatio (
+			AssetID           TEXT PRIMARY KEY,
+			SizeRatio         DOUBLE,
+			VideoFileSize     INT,
+			StreamFolderSize  INT
+		)
+	`)
+
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+	_, err = statement.Exec()
+	if err != nil {
+		log.Fatalln("Error in creating DB", err)
+	}
+
+	statement, err = database.Prepare(`
+		CREATE TABLE IF NOT EXISTS MeanSizeRatio (
+			MeanSizeRatio  DOUBLE,
+			RatioSum       DOUBLE,
+			Count          INT
 		)
 	`)
 
@@ -323,6 +357,51 @@ func UpdateAssetReady(assetID string, assetReady bool) {
 		log.Println("Error in updating asset", assetID)
 		log.Println(err)
 	}
+}
+
+// AddSizeRatio adds a new SizeRatio.
+func AddSizeRatio(x model.SizeRatio) {
+	statement, err := sqldb.Prepare("INSERT INTO SizeRatio (AssetID, SizeRatio, VideoFileSize, StreamFolderSize) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		log.Println("Error in inserting SizeRatio for asset", x.AssetID)
+		log.Println(err)
+	}
+	_, err = statement.Exec(x.AssetID, x.SizeRatio, x.VideoFileSize, x.StreamFolderSize)
+	if err != nil {
+		log.Println("Error in inserting SizeRatio for asset", x.AssetID)
+		log.Println(err)
+	}
+}
+
+// UpdateMeanSizeRatio updates the mean size ratio .
+func UpdateMeanSizeRatio(ratio float64, ratioSum float64, count uint64) {
+	statement, err := sqldb.Prepare("UPDATE MeanSizeRatio SET MeanSizeRatio=?, RatioSum=?, Count=?")
+	if err != nil {
+		log.Println("Error in updating MeanSizeRatio", ratio)
+		log.Println(err)
+	}
+	_, err = statement.Exec(ratio, ratioSum, count)
+	if err != nil {
+		log.Println("Error in updating MeanSizeRatio", ratio)
+		log.Println(err)
+	}
+}
+
+// GetMeanSizeRatio returns the current mean size ratio.
+func GetMeanSizeRatio() model.MeanSizeRatio {
+	rows, err := sqldb.Query("SELECT * FROM MeanSizeRatio")
+	if err != nil {
+		log.Println("Error in getting MeanSizeRatio")
+		log.Println(err)
+	}
+	data := []model.MeanSizeRatio{}
+	x := model.MeanSizeRatio{}
+	for rows.Next() {
+		rows.Scan(&x.MeanSizeRatio, &x.RatioSum, &x.Count)
+		data = append(data, x)
+	}
+	fmt.Println("here", x)
+	return x
 }
 
 // ****************************************

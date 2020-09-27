@@ -26,6 +26,7 @@ import (
 	"github.com/buidl-labs/Demux/util"
 	"github.com/google/uuid"
 	"github.com/ipfs/go-cid"
+	powc "github.com/textileio/powergate/api/client"
 )
 
 // UploadsHandler handles the asset uploads
@@ -524,8 +525,74 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 					_ = stdout
 				}
 			}
+			dirsize, err := DirSize("./assets/" + id.String())
+			if err != nil {
+				log.Println("finding dirsize", err)
+			}
+			fmt.Println("dirsize", dirsize)
+			ratio := float64(dirsize) / float64(videoFileSize)
+			dataservice.AddSizeRatio(model.SizeRatio{
+				AssetID:          id.String(),
+				SizeRatio:        ratio,
+				VideoFileSize:    uint64(videoFileSize),
+				StreamFolderSize: dirsize,
+			})
+			msr := dataservice.GetMeanSizeRatio()
+			currRatioSum := msr.RatioSum
+			currCount := msr.Count
+			dataservice.UpdateMeanSizeRatio((ratio+currRatioSum)/float64(currCount+1), ratio+currRatioSum, currCount+1)
 
-			ctx := context.Background()
+			//************************* Compute estimated storage price
+			estimatedPriceStr := ""
+			estimatedPrice := uint64(0)
+			storageDurationInt := 31536000         // deal duration currently set to 1 year. 15768000-> 6 months
+			duration := uint64(storageDurationInt) //duration of deal in seconds (provided by user)
+			epochs := uint64(duration / 30)
+			folderSize := dirsize //size of folder in MiB
+			fmt.Println("folderSize", folderSize, "videoFileSize", videoFileSize)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			pgClient, _ := powc.NewClient(util.InitialPowergateSetup.PowergateAddr)
+			defer func() {
+				if err := pgClient.Close(); err != nil {
+					log.Printf("closing powergate client: %s\n", err)
+				}
+			}()
+
+			index, err := pgClient.Asks.Get(ctx)
+			if err != nil {
+				log.Printf("getting asks: %s\n", err)
+			}
+			if len(index.Storage) > 0 {
+				log.Printf("Storage median price: %v\n", index.StorageMedianPrice)
+				log.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
+				fmt.Println("index:\n", index)
+				data := make([][]string, len(index.Storage))
+				i := 0
+				pricesSum := 0
+				for _, ask := range index.Storage {
+					pricesSum += int(ask.Price)
+					data[i] = []string{
+						ask.Miner,
+						strconv.Itoa(int(ask.Price)),
+						strconv.Itoa(int(ask.MinPieceSize)),
+						strconv.FormatInt(ask.Timestamp, 10),
+						strconv.FormatInt(ask.Expiry, 10),
+					}
+					// fmt.Printf("ask %d: %v\n", i, data[i])
+					i++
+				}
+				meanEpochPrice := uint64(pricesSum / len(index.Storage))
+				fmt.Println("pricesSum", pricesSum)
+				fmt.Println("meanEpochPrice", meanEpochPrice)
+				estimatedPrice = meanEpochPrice * epochs * folderSize / 1024
+				fmt.Println("estimatedPrice", estimatedPrice)
+				estimatedPriceStr = fmt.Sprintf("%f", estimatedPrice)
+			}
+			//*************************
+
+			ctx = context.Background()
 
 			var currCID cid.Cid
 			var streamURL string
@@ -564,7 +631,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 						CID:                  currCIDStr,
 						Miner:                "",
 						StorageCost:          big.NewInt(0).String(),
-						StorageCostEstimated: big.NewInt(0).String(),
+						StorageCostEstimated: estimatedPriceStr,
 						FilecoinDealExpiry:   int64(0),
 						FFSToken:             tok,
 						JobID:                jid,
@@ -605,7 +672,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 				CID:                  currCIDStr,
 				Miner:                "",
 				StorageCost:          big.NewInt(0).String(),
-				StorageCostEstimated: big.NewInt(0).String(),
+				StorageCostEstimated: estimatedPriceStr,
 				FilecoinDealExpiry:   int64(0),
 				FFSToken:             tok,
 				JobID:                jid,
@@ -630,4 +697,17 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 			responded = true
 		}
 	}
+}
+func DirSize(path string) (uint64, error) {
+	var size uint64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += uint64(info.Size())
+		}
+		return err
+	})
+	return size, err
 }

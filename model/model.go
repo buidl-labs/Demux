@@ -41,4 +41,17 @@ type User struct {
 	CreatedAt  int64  `json:"CreatedAt"`
 }
 
-// Password   string `json:"Password"`
+// SizeRatio store the ratio StreamFolderSize/VideoFileSize.
+type SizeRatio struct {
+	AssetID          string  `json:"AssetID"`
+	SizeRatio        float64 `json:"SizeRatio"`
+	VideoFileSize    uint64  `json:"VideoFileSize"`
+	StreamFolderSize uint64  `json:"StreamFolderSize"`
+}
+
+// MeanSizeRatio stores the mean SizeRatio of all assets.
+type MeanSizeRatio struct {
+	MeanSizeRatio float64 `json:"Ratio"`
+	RatioSum      float64 `json:"RatioSum"`
+	Count         uint64  `json:"Count"`
+}
