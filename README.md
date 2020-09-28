@@ -37,6 +37,18 @@ A gateway to facilitate a decentralised streaming ecosystem.
   }
   ```
 
+  Required fields:
+
+  - User authentication: `<TOKEN_ID>:<TOKEN_SECRET>` (colon-separated)
+  - File `input_file`: local file path
+
+  Response fields:
+
+  ```json
+   - "asset_id": type string
+      - Used to identify an uploaded video.
+  ```
+
 - **`GET /asset/<asset_id>`**
 
   This endpoint gives us the status of an asset (uploaded video) in the pipeline.
@@ -65,18 +77,41 @@ A gateway to facilitate a decentralised streaming ecosystem.
   }
   ```
 
+  Response fields:
+
+  ```json
+   - "asset_error":                type boolean
+      - Initially its value is false, it will become true in case there is an error.
+   - "asset_id":                   type string
+      - Used to identify an uploaded video.
+   - "asset_ready":                type boolean
+      - Initially its value is false, it will become true once the video is ready for streaming.
+   - "asset_status":               type string
+      - Can have five possible values, corresponding to `asset_status_code`:
+          - 0: "video uploaded successfully"
+          - 1: "processing in livepeer"
+          - 2: "attempting to pin to ipfs"
+          - 3: "pinned to ipfs, attempting to store in filecoin"
+          - 4: "stored in filecoin"
+   - "asset_status_code":          type int
+      - Possible values: 0, 1, 2, 3, 4
+   - "created_at":                 type int
+      - Unix timestamp of asset creation.
+   - "storage_cost":               type int
+      - Actual storage cost in filecoin network (value in attoFIL).
+   - "storage_cost_estimated":     type int
+      - Estimated storage cost in filecoin network (value in attoFIL).
+   - "stream_url":                 type string
+      - URL to stream the video.
+   - "transcoding_cost": type int
+      - Actual transcoding cost in livepeer network (value in WEI).
+   - "transcoding_cost_estimated": type int
+      - Estimated transcoding cost in livepeer network (value in WEI).
+  ```
+
 - **`POST /pricing`**
 
   This is used to estimate the transcoding and storage cost for a given video.
-
-  Input data params:
-
-  - `video_duration`: Duration of the video in seconds. Its value must be greater than `0`.
-  - `video_file_size`: Size of the video in MiB (`1 MiB = 2^20 B`).
-  - `storage_duration`: Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
-
-  Output:
-  `storage_cost_estimated` is in attoFIL and `transcoding_cost_estimated` is in WEI.
 
   Sample request:
 
@@ -91,6 +126,26 @@ A gateway to facilitate a decentralised streaming ecosystem.
     "storage_cost_estimated": 1562410068450,
     "transcoding_cost_estimated": 170337629481511
   }
+  ```
+
+  Required fields:
+
+  ```json
+   - "video_duration":   type int
+      - Duration of the video in seconds. Its value must be greater than `0`.
+   - "video_file_size":  type int
+      - Size of the video in MiB (1 MiB = 2^20 B).
+   - "storage_duration": type int
+      - Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
+  ```
+
+  Response fields:
+
+  ```json
+   - "storage_cost_estimated":     type int
+      - Estimated storage cost in filecoin network (value in attoFIL).
+   - "transcoding_cost_estimated": type int
+      - Estimated transcoding cost in livepeer network (value in WEI).
   ```
 
 ## Requirements
