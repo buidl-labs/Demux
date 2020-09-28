@@ -529,6 +529,8 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Println("finding dirsize", err)
 			}
+			dirsize = dirsize / (1024 * 1024)
+			videoFileSize = videoFileSize / (1024 * 1024)
 			fmt.Println("dirsize", dirsize)
 			ratio := float64(dirsize) / float64(videoFileSize)
 			dataservice.AddSizeRatio(model.SizeRatio{
@@ -544,13 +546,13 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 
 			//************************* Compute estimated storage price
 			// estimatedPriceStr := ""
-			estimatedPrice := uint64(0)
-			storageDurationInt := 31536000         // deal duration currently set to 1 year. 15768000-> 6 months
-			duration := uint64(storageDurationInt) //duration of deal in seconds (provided by user)
-			epochs := uint64(duration / 30)
+			estimatedPrice := float64(0)
+			storageDurationInt := 31536000          // deal duration currently set to 1 year. 15768000-> 6 months
+			duration := float64(storageDurationInt) //duration of deal in seconds (provided by user)
+			epochs := float64(duration / float64(30))
 			folderSize := dirsize //size of folder in MiB
 			fmt.Println("folderSize", folderSize, "videoFileSize", videoFileSize)
-
+			fmt.Println("duration", duration, "epochs", epochs)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			pgClient, _ := powc.NewClient(util.InitialPowergateSetup.PowergateAddr)
@@ -567,7 +569,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 			if len(index.Storage) > 0 {
 				log.Printf("Storage median price: %v\n", index.StorageMedianPrice)
 				log.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
-				fmt.Println("index:\n", index)
+				// fmt.Println("index:\n", index)
 				data := make([][]string, len(index.Storage))
 				i := 0
 				pricesSum := 0
@@ -583,10 +585,11 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 					// fmt.Printf("ask %d: %v\n", i, data[i])
 					i++
 				}
-				meanEpochPrice := uint64(pricesSum / len(index.Storage))
+				meanEpochPrice := float64(float64(pricesSum) / float64(len(index.Storage)))
 				fmt.Println("pricesSum", pricesSum)
 				fmt.Println("meanEpochPrice", meanEpochPrice)
-				estimatedPrice = meanEpochPrice * epochs * folderSize / 1024
+				// estimatedPrice = meanEpochPrice * epochs * folderSize / 1024
+				estimatedPrice = meanEpochPrice * float64(epochs) * float64(folderSize) / float64(1024)
 				fmt.Println("estimatedPrice", estimatedPrice)
 				// estimatedPriceStr = fmt.Sprintf("%f", estimatedPrice)
 			}

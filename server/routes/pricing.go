@@ -123,12 +123,13 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		// TODO: Calculate powergate (filecoin) storage price
 
-		estimatedPrice := uint64(0)
+		estimatedPrice := float64(0)
 
-		duration := uint64(storageDurationInt) //duration of deal in seconds (provided by user)
-		epochs := uint64(duration / 30)
-		folderSize := getFolderSizeEstimate(videoFileSize) //size of folder in MiB (to be predicted by estimation algorithm)
+		duration := float64(storageDurationInt) //duration of deal in seconds (provided by user)
+		epochs := float64(duration / float64(30))
+		folderSize := getFolderSizeEstimate(float64(videoFileSize)) //size of folder in MiB (to be predicted by estimation algorithm)
 		fmt.Println("folderSize", folderSize, "videoFileSize", videoFileSize)
+		fmt.Println("duration", duration, "epochs", epochs)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -146,7 +147,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		if len(index.Storage) > 0 {
 			log.Printf("Storage median price: %v\n", index.StorageMedianPrice)
 			log.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
-			fmt.Println("index:\n", index)
+			// fmt.Println("index:\n", index)
 			data := make([][]string, len(index.Storage))
 			i := 0
 			pricesSum := 0
@@ -162,11 +163,12 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 				// fmt.Printf("ask %d: %v\n", i, data[i])
 				i++
 			}
-			meanEpochPrice := uint64(pricesSum / len(index.Storage))
+			meanEpochPrice := float64(float64(pricesSum) / float64(len(index.Storage)))
 			fmt.Println("pricesSum", pricesSum)
 			fmt.Println("meanEpochPrice", meanEpochPrice)
-			estimatedPrice = meanEpochPrice * epochs * folderSize / 1024
+			estimatedPrice = meanEpochPrice * float64(epochs) * folderSize / float64(1024)
 			fmt.Println("estimatedPrice", estimatedPrice)
+			// estimatedPrice = int64(estimatedPrice)
 		}
 
 		// TODO: Convert total price to USD and return
@@ -175,16 +177,16 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
 				"transcoding_cost_estimated": transcodingCostWEI,
-				"storage_cost_estimated":     estimatedPrice,
+				"storage_cost_estimated":     int64(estimatedPrice),
 			}
 			util.WriteResponse(data, w)
 		}
 	}
 }
-func getFolderSizeEstimate(fileSize uint64) uint64 {
+func getFolderSizeEstimate(fileSize float64) float64 {
 	msr := dataservice.GetMeanSizeRatio()
 	fmt.Println("MeanSizeRatio", msr.MeanSizeRatio)
 	fmt.Println("fileSize", fileSize)
 
-	return fileSize * uint64(msr.MeanSizeRatio)
+	return fileSize * float64(msr.MeanSizeRatio)
 }
