@@ -201,9 +201,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 				log.Println("Livepeer pull timed out")
 				// Set AssetError to true
 				dataservice.UpdateAssetStatus(id.String(), 1, "processing in livepeer", true)
-				// TODO: this is temporary:
-				livepeerPullCompleted = true
-				// return
+				return
 			case err := <-done:
 				if err != nil {
 					// Set AssetError to true
