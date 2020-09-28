@@ -6,6 +6,8 @@
 
 A gateway to facilitate a decentralised streaming ecosystem.
 
+Currently hosted at https://demux.onrender.com/. For authentication credentials, please reach out to us at [saumay@buidllabs.io](saumay@buidllabs.io).
+
 ## Getting Started
 
 - Clone the repo: `git clone https://github.com/buidl-labs/Demux`
