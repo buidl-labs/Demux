@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/ipfs/go-cid v0.0.7
 	github.com/ipfs/go-log/v2 v2.1.2-0.20200626104915-0016c0b4b3e4
+	github.com/julienschmidt/httprouter v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/textileio/powergate v0.6.5
