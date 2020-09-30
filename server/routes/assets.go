@@ -12,7 +12,11 @@ import (
 
 // AssetStatusHandler enables checking the status of an asset in its demux lifecycle.
 func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	if r.Method == "GET" {
+
 		vars := mux.Vars(r)
 
 		if dataservice.IfAssetExists(vars["asset_id"]) {

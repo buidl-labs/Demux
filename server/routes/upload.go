@@ -31,6 +31,9 @@ import (
 
 // UploadsHandler handles the asset uploads
 func UploadsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
 	if r.Method == "POST" {
 
 		var responded = false
@@ -105,6 +108,7 @@ func UploadsHandler(w http.ResponseWriter, r *http.Request) {
 		stdout, err := cmd.Output()
 		if err != nil {
 			log.Println(err)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(http.StatusFailedDependency)
 			data := map[string]interface{}{
 				"error": "could not create asset",

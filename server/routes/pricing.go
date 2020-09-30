@@ -25,6 +25,9 @@ type Data struct {
 
 // PriceEstimateHandler handles the /pricing endpoint
 func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	if r.Method == "POST" {
 
 		var responded = false

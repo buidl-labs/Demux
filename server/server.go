@@ -6,7 +6,6 @@ import (
 
 	"github.com/buidl-labs/Demux/server/routes"
 
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
@@ -21,11 +20,11 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 func StartServer(serverPort string) {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/", HomeHandler).Methods("GET")
-	router.HandleFunc("/asset/{asset_id}", routes.AssetStatusHandler).Methods("GET")
-	router.HandleFunc("/pricing", routes.PriceEstimateHandler).Methods("POST")
-	router.HandleFunc("/upload", routes.UploadsHandler).Methods("POST")
+	router.HandleFunc("/", HomeHandler).Methods("GET", http.MethodOptions)
+	router.HandleFunc("/asset/{asset_id}", routes.AssetStatusHandler).Methods("GET", http.MethodOptions)
+	router.HandleFunc("/pricing", routes.PriceEstimateHandler).Methods("POST", http.MethodOptions)
+	router.HandleFunc("/upload", routes.UploadsHandler).Methods("POST", http.MethodOptions)
 
 	log.Infoln("Starting server at PORT", serverPort)
-	log.Fatalln("Error in starting server", http.ListenAndServe(serverPort, handlers.CORS()(router)))
+	log.Fatalln("Error in starting server", http.ListenAndServe(serverPort, router))
 }
