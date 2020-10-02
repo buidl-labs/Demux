@@ -7,7 +7,7 @@
 A gateway to facilitate a decentralised streaming ecosystem.
 
 Workflow depicted below:
-![image](https://user-images.githubusercontent.com/24296199/94940814-a9f57f80-04f1-11eb-9616-783c6ac207d1.png)
+![image](https://user-images.githubusercontent.com/24296199/94940994-e923d080-04f1-11eb-8c3d-5aad1f31e91f.png)
 
 
 Currently hosted at https://demux.onrender.com/. For authentication credentials, please reach out to us at [saumay@buidllabs.io](saumay@buidllabs.io).
