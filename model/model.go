@@ -8,7 +8,15 @@ type Asset struct {
 	AssetStatus     string `json:"AssetStatus"`
 	AssetError      bool   `json:"AssetError"`
 	StreamURL       string `json:"StreamURL"`
+	Thumbnail       string `json:"Thumbnail"`
 	CreatedAt       int64  `json:"CreatedAt"`
+}
+
+// Upload is the entity (video) which is uploaded by the client.
+type Upload struct {
+	AssetID string `json:"AssetID"`
+	URL     string `json:"URL"`
+	Status  bool   `json:"Status"`
 }
 
 // TranscodingDeal is the type binding for a transcoding deal in the livepeer network.
