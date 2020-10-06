@@ -119,6 +119,7 @@ func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
 				"asset_status":      asset.AssetStatus,
 				"asset_error":       asset.AssetError,
 				"stream_url":        asset.StreamURL,
+				"thumbnail":         asset.Thumbnail,
 				"created_at":        asset.CreatedAt,
 			}
 			storageCostBigInt := new(big.Int)

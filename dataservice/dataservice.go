@@ -378,6 +378,20 @@ func UpdateStreamURL(assetID string, streamURL string) {
 	}
 }
 
+// UpdateThumbnail updates the thumbnail of an asset.
+func UpdateThumbnail(assetID string, thumbnail string) {
+	statement, err := sqldb.Prepare("UPDATE Asset SET Thumbnail=? WHERE AssetID=?")
+	if err != nil {
+		log.Println("Error in updating thumbnail for asset", assetID)
+		log.Println(err)
+	}
+	_, err = statement.Exec(thumbnail, assetID)
+	if err != nil {
+		log.Println("Error in updating thumbnail for asset", assetID)
+		log.Println(err)
+	}
+}
+
 // CreateUser creates a new user.
 func CreateUser(x model.User) {
 	statement, err := sqldb.Prepare("INSERT INTO User (Name, TokenID, Digest, AssetCount, CreatedAt) VALUES (?, ?, ?, ?, ?)")

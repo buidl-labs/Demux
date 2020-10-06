@@ -403,6 +403,9 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						util.RemoveContents("./assets/" + assetID)
 					*/
 				} else {
+					// generate thumbnail
+					exec.Command("ffmpeg", "-i", demuxFileName, "-ss", "00:00:01.000", "-vframes", "1", "./assets/"+assetID+"/thumbnail.png").Output()
+
 					rmcmd := exec.Command("rm", "-rf", demuxFileName)
 					_, err := rmcmd.Output()
 					if err != nil {
@@ -573,6 +576,9 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						// Update streamURL of the asset
 						dataservice.UpdateStreamURL(assetID, streamURL)
 
+						// Update thumbnail of the asset
+						dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
+
 						// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
 						dataservice.UpdateAssetStatus(assetID, 3, "pinned to ipfs, attempting to store in filecoin", false)
 					} else {
@@ -613,6 +619,9 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 				// Update streamURL of the asset
 				dataservice.UpdateStreamURL(assetID, streamURL)
+
+				// Update thumbnail of the asset
+				dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
 
 				// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
 				dataservice.UpdateAssetStatus(assetID, 3, "pinned to ipfs, attempting to store in filecoin", false)
