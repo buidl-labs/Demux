@@ -9,7 +9,6 @@ A gateway to facilitate a decentralised streaming ecosystem.
 Workflow depicted below:
 ![image](https://user-images.githubusercontent.com/24296199/94940994-e923d080-04f1-11eb-8c3d-5aad1f31e91f.png)
 
-
 Currently hosted at https://demux.onrender.com/. For authentication credentials, please reach out to us at [saumay@buidllabs.io](saumay@buidllabs.io).
 
 ## Getting Started
@@ -25,35 +24,93 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
 
 ## API Endpoints
 
-- **`POST /upload`**
+- **`POST /asset`**
 
-  This is used to upload a video for streaming.
+  This is used to create a new 'asset'. It returns an `asset_id` and a `url`, where the client can upload a file.
 
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/upload -u <TOKEN_ID>:<TOKEN_SECRET> -F input_file=@/Users/johndoe/hello.mp4
+  $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -d {}
+  ```
+
+  Basic authentication must be done by passing the user flag as shown above (colon-separated), or by passing the `Authorization` header.
+
+  For example, in JavaScript:
+
+  ```js
+  headers: {
+    'Authorization' : 'Basic ' + Buffer.from('<TOKEN_ID>:<TOKEN_SECRET>', 'utf-8').toString('base64')
+  }
   ```
 
   Sample response:
 
   ```json
   {
-    "asset_id": "fba8cda5-6c71-46d7-ac15-28424343c037"
+    "asset_id": "34d048bb-1076-4937-8b91-6bcda7a6187c",
+    "url": "http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c"
   }
   ```
 
-  Required fields:
+- **`POST /fileupload/<asset_id>`**
 
-  - User authentication: `<TOKEN_ID>:<TOKEN_SECRET>` (colon-separated)
-  - File `input_file`: local file path
+  This endpoint is used to upload a video in chunks using [resumable.js](https://github.com/23/resumable.js).
 
-  Response fields:
+  A frontend client can send the request in the following manner:
+
+  ```js
+  targetURL = `http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c`
+  const r = new Resumable({
+    target: targetURL
+  })
+  r.addFile(myfile) // myfile is the file (mp4 video) that is being uploaded.
+  ```
+
+  Here, the `targetUrl` is the url received after creating an asset using `POST /asset`.
+  The status of the upload can be tracked using event listeners:
+
+  ```js
+  r.on('fileAdded', function (file) {
+    r.upload()
+  })
+
+  r.on('progress', function () {
+    console.log(Math.floor(r.progress() * 100))
+  })
+
+  r.on('fileSuccess', function (file, message) {
+    console.log('Successfully uploaded', file, 'message:', message)
+  })
+
+  r.on('fileError', function (file, message) {
+    console.log('Error uploading the file:', message)
+  })
+  ```
+
+  For more details, refer to the [resumable.js docs](https://github.com/23/resumable.js).
+
+- **`GET /upload/<asset_id>`**
+
+  This endpoint lets us see the status of an upload.
+
+  Sample request:
+
+  ```bash
+  $ curl http://localhost:8000/upload/34d048bb-1076-4937-8b91-6bcda7a6187c
+  ```
+
+  Sample response:
 
   ```json
-   - "asset_id": type string
-      - Used to identify an uploaded video.
+  {
+    "asset_id": "34d048bb-1076-4937-8b91-6bcda7a6187c",
+    "status": true,
+    "url": "http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c"
+  }
   ```
+
+  In the response, `status` is initially `false`, and it becomes `true` when the file has been uploaded successfully to Demux (using `/POST /fileupload/<asset_id>`). A frontend client may poll for the upload status to change to `true` before proceeding to the next step in the workflow.
 
 - **`GET /asset/<asset_id>`**
 
@@ -62,7 +119,7 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   Sample request:
 
   ```bash
-  $ curl http://localhost:8000/asset/fba8cda5-6c71-46d7-ac15-28424343c037
+  $ curl http://localhost:8000/asset/34d048bb-1076-4937-8b91-6bcda7a6187c
   ```
 
   Sample response:
@@ -70,50 +127,51 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   ```json
   {
     "asset_error": false,
-    "asset_id": "595a040d-eb9c-4e71-97bc-ae2eba60fe61",
+    "asset_id": "34d048bb-1076-4937-8b91-6bcda7a6187c",
     "asset_ready": true,
     "asset_status": "pinned to ipfs, attempting to store in filecoin",
     "asset_status_code": 3,
-    "created_at": 1601220874,
+    "created_at": 1602077805,
     "storage_cost": 0,
-    "storage_cost_estimated": 6158801662122543,
-    "stream_url": "https://ipfs.io/ipfs/bafybeied3ahoc2wm752myjiamod6tzvyujvxtikpl2pcy2it4loyiu63ni/root.m3u8",
+    "storage_cost_estimated": 854019799804687,
+    "stream_url": "https://demuxipfsrevproxy.onrender.com/ipfs/bafybeiddn2lzoybioi6xh76j7aa67jgxgyyxa42nirfxpo5q477432jzz4/root.m3u8",
+    "thumbnail": "https://demuxipfsrevproxy.onrender.com/ipfs/bafybeiddn2lzoybioi6xh76j7aa67jgxgyyxa42nirfxpo5q477432jzz4/thumbnail.png",
     "transcoding_cost": 0,
-    "transcoding_cost_estimated": 28389604913585
+    "transcoding_cost_estimated": 107880498671623
   }
   ```
 
   Response fields:
 
-  ```json
-   - "asset_error":                type boolean
-      - Initially its value is false, it will become true in case there is an error.
-   - "asset_id":                   type string
-      - Used to identify an uploaded video.
-   - "asset_ready":                type boolean
-      - Initially its value is false, it will become true once the video is ready for streaming.
-   - "asset_status":               type string
-      - Can have five possible values, corresponding to `asset_status_code`:
-          - 0: "video uploaded successfully"
-          - 1: "processing in livepeer"
-          - 2: "attempting to pin to ipfs"
-          - 3: "pinned to ipfs, attempting to store in filecoin"
-          - 4: "stored in filecoin"
-   - "asset_status_code":          type int
-      - Possible values: 0, 1, 2, 3, 4
-   - "created_at":                 type int
-      - Unix timestamp of asset creation.
-   - "storage_cost":               type int
-      - Actual storage cost in filecoin network (value in attoFIL).
-   - "storage_cost_estimated":     type int
-      - Estimated storage cost in filecoin network (value in attoFIL).
-   - "stream_url":                 type string
-      - URL to stream the video.
-   - "transcoding_cost": type int
-      - Actual transcoding cost in livepeer network (value in WEI).
-   - "transcoding_cost_estimated": type int
-      - Estimated transcoding cost in livepeer network (value in WEI).
-  ```
+  - "asset_error": type **boolean**
+    - Initially its value is false, it will become true in case there is an error.
+  - "asset_id": type **string**
+    - Used to identify an uploaded video.
+  - "asset_ready": type **boolean**
+    - Initially its value is false, it will become true once the video is ready for streaming.
+  - "asset_status": type **string**
+    - Can have five possible values, corresponding to `asset_status_code`:
+      - 0: "video uploaded successfully"
+      - 1: "processing in livepeer"
+      - 2: "attempting to pin to ipfs"
+      - 3: "pinned to ipfs, attempting to store in filecoin"
+      - 4: "stored in filecoin"
+  - "asset_status_code": type **int**
+    - Possible values: 0, 1, 2, 3, 4
+  - "created_at": type **int**
+    - Unix timestamp of asset creation.
+  - "storage_cost": type **int**
+    - Actual storage cost in filecoin network (value in attoFIL).
+  - "storage_cost_estimated": type **int**
+    - Estimated storage cost in filecoin network (value in attoFIL).
+  - "stream_url": type **string**
+    - URL to stream the video.
+  - "thumbnail": type **string**
+    - Thumbnail for the video.
+  - "transcoding_cost": type **int**
+    - Actual transcoding cost in livepeer network (value in WEI).
+  - "transcoding_cost_estimated": type **int**
+    - Estimated transcoding cost in livepeer network (value in WEI).
 
 - **`POST /pricing`**
 
@@ -136,23 +194,33 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
 
   Required fields:
 
-  ```json
-   - "video_duration":   type int
-      - Duration of the video in seconds. Its value must be greater than `0`.
-   - "video_file_size":  type int
-      - Size of the video in MiB (1 MiB = 2^20 B).
-   - "storage_duration": type int
-      - Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
-  ```
+  - "video_duration": type **int**
+    - Duration of the video in seconds. Its value must be greater than `0`.
+  - "video_file_size": type **int**
+    - Size of the video in MiB (1 MiB = 2^20 B).
+  - "storage_duration": type **int**
+    - Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
 
   Response fields:
 
-  ```json
-   - "storage_cost_estimated":     type int
-      - Estimated storage cost in filecoin network (value in attoFIL).
-   - "transcoding_cost_estimated": type int
-      - Estimated transcoding cost in livepeer network (value in WEI).
+  - "storage_cost_estimated": type **int**
+    - Estimated storage cost in filecoin network (value in attoFIL).
+  - "transcoding_cost_estimated": type **int**
+    - Estimated transcoding cost in livepeer network (value in WEI).
+
+- **TODO (NOT Supported yet): `POST /simplefileupload/<asset_id>`**
+
+  This is used to upload a video for streaming.
+
+  Sample request:
+
+  ```bash
+  $ curl http://localhost:8000/simplefileupload/34d048bb-1076-4937-8b91-6bcda7a6187c -F input_file=@/Users/johndoe/hello.mp4
   ```
+
+  Required field:
+
+  - File `input_file`: local file path
 
 ## Requirements
 
