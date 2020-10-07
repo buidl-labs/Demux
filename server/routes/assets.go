@@ -22,7 +22,7 @@ import (
 func AssetHandler(w http.ResponseWriter, r *http.Request) {
 	// w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
 
 	if r.Method == "POST" {
 		// token verify
@@ -41,7 +41,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				stdout, err := cmd.Output()
 				if err != nil {
 					log.Println(err)
-					w.Header().Set("Access-Control-Allow-Origin", "*")
+					// w.Header().Set("Access-Control-Allow-Origin", "*")
 					w.WriteHeader(http.StatusFailedDependency)
 					data := map[string]interface{}{
 						"error": "could not create asset",

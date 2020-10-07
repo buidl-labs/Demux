@@ -643,6 +643,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	if r.Method == "GET" {
 		vars := mux.Vars(r)
 		if dataservice.IfUploadExists(vars["asset_id"]) {

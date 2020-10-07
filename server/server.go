@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/buidl-labs/Demux/server/routes"
-	"github.com/rs/cors"
+	// "github.com/rs/cors"
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -31,6 +31,6 @@ func StartServer(serverPort string) {
 	// router.HandleFunc("/uploads", routes.UploadsHandler).Methods("POST", http.MethodOptions)
 
 	log.Infoln("Starting server at PORT", serverPort)
-	handler := cors.Default().Handler(router)
-	log.Fatalln("Error in starting server", http.ListenAndServe(serverPort, handler))
+	// handler := cors.Default().Handler(router)
+	log.Fatalln("Error in starting server", http.ListenAndServe(serverPort, router))
 }
