@@ -315,62 +315,61 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 									return
 								}
 								fmt.Println("segmentsLength", len(segments))
-								if len(segments) > 6 {
-									durations := make([]string, len(segments))
-									durSum := float64(0)
 
-									for i, seg := range segments {
-										segName := seg.Name()
-										fmt.Println("segName", segName)
+								durations := make([]string, len(segments))
+								durSum := float64(0)
 
-										stdout, err := exec.Command("ffprobe", "-i", "./assets/"+assetID+"/"+f.Name()+"/"+res+"/"+segName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
-										if err != nil {
-											log.Println(err)
-											return
-										}
-										duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
-										if err != nil {
-											log.Println(err)
-											return
-										}
-										fmt.Println("duree", duration)
-										durSum += duration
-										durations[i] = fmt.Sprintf("%.3f", duration)
-									}
-									fmt.Println("durs", durations)
-									fmt.Println("total", durSum, int(durSum))
-									var m3u8str strings.Builder
-									m3u8str.WriteString("#EXTM3U\n" +
-										"#EXT-X-VERSION:3\n" +
-										"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
-										"#EXT-X-MEDIA-SEQUENCE:0\n")
-									for i, dur := range durations {
-										m3u8str.WriteString("#EXTINF:" + dur + ",\n" +
-											res + "/" + strconv.Itoa(i) + ".ts\n")
-									}
-									m3u8str.WriteString("#EXT-X-ENDLIST\n")
-									// txt := "#EXTM3U\n" +
-									// 	"#EXT-X-VERSION:3\n" +
-									// 	"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
-									// 	"#EXT-X-MEDIA-SEQUENCE:0\n" +
-									// 	"#EXTINF:" + fmt.Sprintf("%.6f", durSum) + ",\n" +
-									// 	"myvid0.ts\n" +
-									// 	"#EXT-X-ENDLIST\n"
-									// fmt.Println(txt)
-									fmt.Println("m3u8str", m3u8str.String())
+								for i, seg := range segments {
+									segName := seg.Name()
+									fmt.Println("segName", segName)
 
-									m3u8strFile, err := os.Create("./assets/" + assetID + "/" + f.Name() + "/" + res + ".m3u8")
-									bWriter := bufio.NewWriter(m3u8strFile)
-									n, err := bWriter.WriteString(m3u8str.String())
+									stdout, err := exec.Command("ffprobe", "-i", "./assets/"+assetID+"/"+f.Name()+"/"+res+"/"+segName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
 									if err != nil {
 										log.Println(err)
 										return
 									}
-									log.Println("created the internal m3u8 file")
-									log.Printf("Wrote %d bytes\n", n)
-									bWriter.Flush()
-
+									duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
+									if err != nil {
+										log.Println(err)
+										return
+									}
+									fmt.Println("duree", duration)
+									durSum += duration
+									durations[i] = fmt.Sprintf("%.3f", duration)
 								}
+								fmt.Println("durs", durations)
+								fmt.Println("total", durSum, int(durSum))
+								var m3u8str strings.Builder
+								m3u8str.WriteString("#EXTM3U\n" +
+									"#EXT-X-VERSION:3\n" +
+									"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
+									"#EXT-X-MEDIA-SEQUENCE:0\n")
+								for i, dur := range durations {
+									m3u8str.WriteString("#EXTINF:" + dur + ",\n" +
+										res + "/" + strconv.Itoa(i) + ".ts\n")
+								}
+								m3u8str.WriteString("#EXT-X-ENDLIST\n")
+								// txt := "#EXTM3U\n" +
+								// 	"#EXT-X-VERSION:3\n" +
+								// 	"#EXT-X-TARGETDURATION:" + strconv.Itoa(int(durSum)) + "\n" +
+								// 	"#EXT-X-MEDIA-SEQUENCE:0\n" +
+								// 	"#EXTINF:" + fmt.Sprintf("%.6f", durSum) + ",\n" +
+								// 	"myvid0.ts\n" +
+								// 	"#EXT-X-ENDLIST\n"
+								// fmt.Println(txt)
+								fmt.Println("m3u8str", m3u8str.String())
+
+								m3u8strFile, err := os.Create("./assets/" + assetID + "/" + f.Name() + "/" + res + ".m3u8")
+								bWriter := bufio.NewWriter(m3u8strFile)
+								n, err := bWriter.WriteString(m3u8str.String())
+								if err != nil {
+									log.Println(err)
+									return
+								}
+								log.Println("created the internal m3u8 file")
+								log.Printf("Wrote %d bytes\n", n)
+								bWriter.Flush()
+
 								pWg.Done()
 							}(res)
 						}
