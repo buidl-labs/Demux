@@ -22,13 +22,27 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
 - Build the docker image: `docker build --tag demux:latest .`
 - Run Demux: `docker run -p 8000:8000 --env-file ./.env demux:latest`
 
+<br>
+
 ## API Endpoints
 
-- **`POST /asset`**
+### At a Glance
 
-  This is used to create a new 'asset'. It returns an `asset_id` and a `url`, where the client can upload a file.
+- [`POST /asset`](#post-asset)
+- [`POST /fileupload/<asset_id>`](#post-fileuploadasset_id)
+- [`GET /upload/<asset_id>`](#get-uploadasset_id)
+- [`GET /asset/<asset_id>`](#get-assetasset_id)
+- [`POST /pricing`](#post-pricing)
 
-  Sample request:
+## <br>
+
+### `POST /asset`
+
+Used to create a new _asset_. It returns an `asset_id` and a `url`, where the client can upload a file.
+
+**Examples**
+
+- Request:
 
   ```bash
   $ curl http://localhost:8000/asset -u <TOKEN_ID>:<TOKEN_SECRET> -d {}
@@ -44,7 +58,7 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   }
   ```
 
-  Sample response:
+- Response:
 
   ```json
   {
@@ -53,54 +67,60 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   }
   ```
 
-- **`POST /fileupload/<asset_id>`**
+<br>
 
-  This endpoint is used to upload a video in chunks using [resumable.js](https://github.com/23/resumable.js).
+### `POST /fileupload/<asset_id>`
 
-  A frontend client can send the request in the following manner:
+This endpoint is used to upload a video in chunks using [resumable.js](https://github.com/23/resumable.js).
 
-  ```js
-  targetURL = `http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c`
-  const r = new Resumable({
-    target: targetURL
-  })
-  r.addFile(myfile) // myfile is the file (mp4 video) that is being uploaded.
-  ```
+A frontend client can send the request in the following manner:
 
-  Here, the `targetUrl` is the url received after creating an asset using `POST /asset`.
-  The status of the upload can be tracked using event listeners:
+```js
+targetURL = `http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c`
+const r = new Resumable({
+  target: targetURL
+})
+r.addFile(myfile) // myfile is the file (mp4 video) that is being uploaded.
+```
 
-  ```js
-  r.on('fileAdded', function (file) {
-    r.upload()
-  })
+Here, the `targetUrl` is the url received after creating an asset using `POST /asset`.
+The status of the upload can be tracked using event listeners:
 
-  r.on('progress', function () {
-    console.log(Math.floor(r.progress() * 100))
-  })
+```js
+r.on('fileAdded', function (file) {
+  r.upload()
+})
 
-  r.on('fileSuccess', function (file, message) {
-    console.log('Successfully uploaded', file, 'message:', message)
-  })
+r.on('progress', function () {
+  console.log(Math.floor(r.progress() * 100))
+})
 
-  r.on('fileError', function (file, message) {
-    console.log('Error uploading the file:', message)
-  })
-  ```
+r.on('fileSuccess', function (file, message) {
+  console.log('Successfully uploaded', file, 'message:', message)
+})
 
-  For more details, refer to the [resumable.js docs](https://github.com/23/resumable.js).
+r.on('fileError', function (file, message) {
+  console.log('Error uploading the file:', message)
+})
+```
 
-- **`GET /upload/<asset_id>`**
+For more details, refer to the [resumable.js docs](https://github.com/23/resumable.js).
 
-  This endpoint lets us see the status of an upload.
+<br>
 
-  Sample request:
+### `GET /upload/<asset_id>`
+
+This endpoint lets us see the status of an upload.
+
+**Examples**
+
+- Request:
 
   ```bash
   $ curl http://localhost:8000/upload/34d048bb-1076-4937-8b91-6bcda7a6187c
   ```
 
-  Sample response:
+- Response:
 
   ```json
   {
@@ -112,17 +132,21 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
 
   In the response, `status` is initially `false`, and it becomes `true` when the file has been uploaded successfully to Demux (using `/POST /fileupload/<asset_id>`). A frontend client may poll for the upload status to change to `true` before proceeding to the next step in the workflow.
 
-- **`GET /asset/<asset_id>`**
+<br>
 
-  This endpoint gives us the status of an asset (uploaded video) in the pipeline.
+### `GET /asset/<asset_id>`
 
-  Sample request:
+This endpoint gives us the status of an asset (uploaded video) in the pipeline.
+
+**Examples**
+
+- Request:
 
   ```bash
   $ curl http://localhost:8000/asset/34d048bb-1076-4937-8b91-6bcda7a6187c
   ```
 
-  Sample response:
+- Response:
 
   ```json
   {
@@ -141,49 +165,40 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   }
   ```
 
-  Response fields:
+**Fields**
 
-  - "asset_error": type **boolean**
-    - Initially its value is false, it will become true in case there is an error.
-  - "asset_id": type **string**
-    - Used to identify an uploaded video.
-  - "asset_ready": type **boolean**
-    - Initially its value is false, it will become true once the video is ready for streaming.
-  - "asset_status": type **string**
-    - Can have five possible values, corresponding to `asset_status_code`:
-      - 0: "video uploaded successfully"
-      - 1: "processing in livepeer"
-      - 2: "attempting to pin to ipfs"
-      - 3: "pinned to ipfs, attempting to store in filecoin"
-      - 4: "stored in filecoin"
-  - "asset_status_code": type **int**
-    - Possible values: 0, 1, 2, 3, 4
-  - "created_at": type **int**
-    - Unix timestamp of asset creation.
-  - "storage_cost": type **int**
-    - Actual storage cost in filecoin network (value in attoFIL).
-  - "storage_cost_estimated": type **int**
-    - Estimated storage cost in filecoin network (value in attoFIL).
-  - "stream_url": type **string**
-    - URL to stream the video.
-  - "thumbnail": type **string**
-    - Thumbnail for the video.
-  - "transcoding_cost": type **int**
-    - Actual transcoding cost in livepeer network (value in WEI).
-  - "transcoding_cost_estimated": type **int**
-    - Estimated transcoding cost in livepeer network (value in WEI).
+- Response:
 
-- **`POST /pricing`**
+  | Field Name                 | Type      | Description                                                                                                                                                                                                                                                                 |
+  | -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | asset_error                | `boolean` | Initially its value is false, it will become true in case there is an error.                                                                                                                                                                                                |
+  | asset_id                   | `string`  | Used to identify an uploaded video.                                                                                                                                                                                                                                         |
+  | asset_ready                | `boolean` | Initially its value is false, it will become true once the video is ready for streaming.                                                                                                                                                                                    |
+  | asset_status               | `string`  | Can have five possible values, corresponding to `asset_status_code` <br> • 0: "video uploaded successfully"<br> • 1: "processing in livepeer"<br> • 2: "attempting to pin to ipfs"<br> • 3: "pinned to ipfs, attempting to store in filecoin"<br> • 4: "stored in filecoin" |
+  | asset_status_code          | `int`     | Possible values: 0, 1, 2, 3, 4                                                                                                                                                                                                                                              |
+  | created_at                 | `int`     | Unix timestamp of asset creation.                                                                                                                                                                                                                                           |
+  | storage_cost               | `int`     | Actual storage cost in filecoin network (value in attoFIL).                                                                                                                                                                                                                 |
+  | storage_cost_estimated     | `int`     | Estimated storage cost in filecoin network (value in attoFIL).                                                                                                                                                                                                              |
+  | stream_url                 | `string`  | URL to stream the video.                                                                                                                                                                                                                                                    |
+  | thumbnail                  | `string`  | Thumbnail for the video.                                                                                                                                                                                                                                                    |
+  | transcoding_cost           | `int`     | Actual transcoding cost in livepeer network (value in WEI).                                                                                                                                                                                                                 |
+  | transcoding_cost_estimated | `int`     | Estimated transcoding cost in livepeer network (value in WEI).                                                                                                                                                                                                              |
 
-  This is used to estimate the transcoding and storage cost for a given video.
+<br>
 
-  Sample request:
+### `POST /pricing`
+
+This is used to estimate the transcoding and storage cost for a given video.
+
+**Examples**
+
+- Request:
 
   ```bash
   $ curl http://localhost:8000/pricing -d "{\"video_duration\":60, \"video_file_size\":28, \"storage_duration\":2628005}"
   ```
 
-  Sample response:
+- Response:
 
   ```json
   {
@@ -192,35 +207,24 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
   }
   ```
 
-  Required fields:
+**Fields**
 
-  - "video_duration": type **int**
-    - Duration of the video in seconds. Its value must be greater than `0`.
-  - "video_file_size": type **int**
-    - Size of the video in MiB (1 MiB = 2^20 B).
-  - "storage_duration": type **int**
-    - Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`.
+- Request:
 
-  Response fields:
+  | Field Name       | Type  | Description                                                                                                                        |
+  | ---------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------- |
+  | video_duration   | `int` | Duration of the video in seconds. Its value must be greater than `0`.                                                              |
+  | video_file_size  | `int` | Size of the video in MiB (1 MiB = 2^20 B).                                                                                         |
+  | storage_duration | `int` | Duration in seconds for which you want to store the video stream in filecoin. Its value must be between `2628003` and `315360000`. |
 
-  - "storage_cost_estimated": type **int**
-    - Estimated storage cost in filecoin network (value in attoFIL).
-  - "transcoding_cost_estimated": type **int**
-    - Estimated transcoding cost in livepeer network (value in WEI).
+- Response:
 
-- **TODO (NOT Supported yet): `POST /simplefileupload/<asset_id>`**
+  | Field Name                 | Type  | Description                                                    |
+  | -------------------------- | ----- | -------------------------------------------------------------- |
+  | storage_cost_estimated     | `int` | Estimated storage cost in filecoin network (value in attoFIL). |
+  | transcoding_cost_estimated | `int` | Estimated transcoding cost in livepeer network (value in WEI). |
 
-  This is used to upload a video for streaming.
-
-  Sample request:
-
-  ```bash
-  $ curl http://localhost:8000/simplefileupload/34d048bb-1076-4937-8b91-6bcda7a6187c -F input_file=@/Users/johndoe/hello.mp4
-  ```
-
-  Required field:
-
-  - File `input_file`: local file path
+<br>
 
 ## Requirements
 
