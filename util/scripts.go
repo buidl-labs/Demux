@@ -3,10 +3,11 @@ package util
 import (
 	"encoding/json"
 	"fmt"
-	golog "log"
 	"net/http"
 	"os"
 	"path/filepath"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // WriteResponse writes some response for a given http request.
@@ -14,11 +15,26 @@ func WriteResponse(data map[string]interface{}, w http.ResponseWriter) {
 	jsonData, err := json.MarshalIndent(data, "", "    ")
 	if err != nil {
 		fmt.Fprintln(w, data)
-		golog.Println(err)
+		log.Warn(err)
 		return
 	}
 	fmt.Fprintln(w, string(jsonData))
 	return
+}
+
+// DirSize returns the size of a directory.
+func DirSize(path string) (uint64, error) {
+	var size uint64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += uint64(info.Size())
+		}
+		return err
+	})
+	return size, err
 }
 
 // Upload is a helper function

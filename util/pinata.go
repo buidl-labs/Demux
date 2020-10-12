@@ -92,8 +92,7 @@ func PinFolder(folder string, name string) (string, error) {
 		return pinataCID, fmt.Errorf("Invalid response status code: %d", resp.StatusCode)
 	}
 
-	// Output the response (should be a JSON)
-	fmt.Println(string(res))
+	// Output the response (should be JSON)
 	var j = []byte(string(res))
 
 	// a map container to decode the JSON structure into

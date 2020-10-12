@@ -3,7 +3,6 @@ package routes
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"math/big"
 	"net/http"
 	"os"
@@ -20,28 +19,27 @@ import (
 
 // AssetHandler enables checking the status of an asset in its demux lifecycle.
 func AssetHandler(w http.ResponseWriter, r *http.Request) {
-	// w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 
 	if r.Method == "POST" {
-		// token verify
+		// Verify auth tokens
 		tokenID, tokenSecret, ok := r.BasicAuth()
-		fmt.Println("sent", "tokenID:", tokenID, "\ntokenSecret:", tokenSecret)
-		fmt.Println("ok", ok)
+
 		if ok {
 			sha256Digest := sha256.Sum256([]byte(tokenID + ":" + tokenSecret))
 			sha256DigestStr := hex.EncodeToString(sha256Digest[:])
-			fmt.Println("now", sha256DigestStr)
+
 			if dataservice.IfUserExists(sha256DigestStr) {
+				log.Info("User auth successful")
 				// Generate a new assetID.
 				id := uuid.New()
 
+				// Create asset directory.
 				cmd := exec.Command("mkdir", "./assets/"+id.String())
 				stdout, err := cmd.Output()
 				if err != nil {
-					log.Println(err)
-					// w.Header().Set("Access-Control-Allow-Origin", "*")
+					log.Error(err)
 					w.WriteHeader(http.StatusFailedDependency)
 					data := map[string]interface{}{
 						"error": "could not create asset",
@@ -62,13 +60,13 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 					Thumbnail:       "https://user-images.githubusercontent.com/24296199/94940994-e923d080-04f1-11eb-8c3d-5aad1f31e91f.png",
 				})
 
+				// Create a new upload.
 				dataservice.CreateUpload(model.Upload{
 					AssetID: id.String(),
 					URL:     os.Getenv("DEMUX_URL") + "fileupload/" + id.String(),
 					Status:  false,
 				})
 
-				fmt.Println("AssetCount++")
 				dataservice.IncrementUserAssetCount(sha256DigestStr)
 
 				w.WriteHeader(http.StatusOK)
@@ -77,7 +75,6 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 					"url":      os.Getenv("DEMUX_URL") + "fileupload/" + id.String(),
 				}
 				util.WriteResponse(data, w)
-
 			} else {
 				w.WriteHeader(http.StatusUnauthorized)
 				data := map[string]interface{}{
@@ -87,7 +84,6 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			fmt.Println("not ok")
 			w.WriteHeader(http.StatusUnauthorized)
 			data := map[string]interface{}{
 				"error": "please use a valid TOKEN_ID and TOKEN_SECRET",
@@ -98,12 +94,13 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// AssetStatusHandler returns the asset details and status.
 func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method == "GET" {
-
+		// Collect path parameters
 		vars := mux.Vars(r)
 
 		if dataservice.IfAssetExists(vars["asset_id"]) {
@@ -125,40 +122,32 @@ func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
 			storageCostBigInt := new(big.Int)
 			storageCostBigInt, ok := storageCostBigInt.SetString(storageDeal.StorageCost, 10)
 			if !ok {
-				fmt.Println("SetString: error", ok)
-				data["storage_cost"] = storageDeal.StorageCost
+				data["storage_cost"] = big.NewInt(0)
 			} else {
-				fmt.Println(storageCostBigInt)
 				data["storage_cost"] = storageCostBigInt
 			}
 
 			storageCostEstimatedBigInt := new(big.Int)
 			storageCostEstimatedBigInt, ok = storageCostEstimatedBigInt.SetString(storageDeal.StorageCostEstimated, 10)
 			if !ok {
-				fmt.Println("SetString: error", ok)
-				data["storage_cost_estimated"] = storageDeal.StorageCostEstimated
+				data["storage_cost_estimated"] = big.NewInt(0)
 			} else {
-				fmt.Println(storageCostBigInt)
 				data["storage_cost_estimated"] = storageCostEstimatedBigInt
 			}
 
 			transcodingCostBigInt := new(big.Int)
 			transcodingCostBigInt, ok = transcodingCostBigInt.SetString(transcodingDeal.TranscodingCost, 10)
 			if !ok {
-				fmt.Println("SetString: error", ok)
-				data["transcoding_cost"] = transcodingDeal.TranscodingCost
+				data["transcoding_cost"] = big.NewInt(0)
 			} else {
-				fmt.Println(transcodingCostBigInt)
 				data["transcoding_cost"] = transcodingCostBigInt
 			}
 
 			transcodingCostEstimatedBigInt := new(big.Int)
 			transcodingCostEstimatedBigInt, ok = transcodingCostEstimatedBigInt.SetString(transcodingDeal.TranscodingCostEstimated, 10)
 			if !ok {
-				fmt.Println("SetString: error", ok)
-				data["transcoding_cost_estimated"] = transcodingDeal.TranscodingCostEstimated
+				data["transcoding_cost_estimated"] = big.NewInt(0)
 			} else {
-				fmt.Println(storageCostBigInt)
 				data["transcoding_cost_estimated"] = transcodingCostEstimatedBigInt
 			}
 

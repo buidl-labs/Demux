@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // OrchestratorStat is an object that is received from the livepeer pricing tool.
@@ -68,7 +70,7 @@ func CalculateTranscodingCost(fileName string, duration float64) (*big.Int, erro
 			return transcodingCostEstimated, fmt.Errorf("finding video duration: %s", err)
 		}
 	}
-	fmt.Println("fileName", fileName, "duration", duration)
+	log.Info("fileName", fileName, "duration", duration)
 
 	// Fetch orchestrator stats from livepeer pricing tool:
 	// GET https://livepeer-pricing-tool.com/orchestratorStats
@@ -128,8 +130,8 @@ func CalculateTranscodingCost(fileName string, duration float64) (*big.Int, erro
 
 	// Transcoding cost of the video in wei
 	livepeerPrice.Int(transcodingCostEstimated) // store converted number in result
-	// transcodingCostEstimated = uint64(livepeerPrice)
-	fmt.Println("livepeer transcodingCostEstimated", transcodingCostEstimated)
+
+	log.Info("livepeer transcodingCostEstimated", transcodingCostEstimated)
 
 	return transcodingCostEstimated, nil
 }
