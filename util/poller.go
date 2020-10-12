@@ -22,10 +22,9 @@ import (
 // RunPoller runs a poller in the background which
 // updates the state of storage deal jobs.
 func RunPoller() {
-
 	i, err := strconv.Atoi(os.Getenv("POLL_INTERVAL"))
 	if err != nil {
-		log.Fatalln("Please set env variable `POLL_INTERVAL`")
+		log.Error("Please set env variable `POLL_INTERVAL`")
 		return
 	}
 	var pollInterval = time.Minute * time.Duration(i)
@@ -45,13 +44,11 @@ func RunPoller() {
 			return
 		case <-time.After(pollInterval):
 			deals := dataservice.GetPendingDeals()
-			fmt.Println("Pending storage deals:")
-			fmt.Println(deals)
+			log.Infof("#pending storage deals: %d\n", len(deals))
 			for _, deal := range deals {
-				fmt.Println("dealjid", deal.JobID)
 				cidcorrtype, _ := cid.Decode(deal.CID)
 				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JobID), cidcorrtype, deal)
-				fmt.Println("pollprog", b, s, err)
+				log.Info("dealJobID", deal.JobID, "pollprog", b, s, err)
 			}
 		}
 	}
@@ -77,7 +74,7 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 	var job ffs.StorageJob
 	select {
 	case <-ctx.Done():
-		log.Infof("job %s status watching canceled", jid)
+		log.Infof("job %s status watching canceled\n", jid)
 		return true, "watching cancelled", nil
 	case s, ok := <-ch:
 		if !ok {
@@ -95,15 +92,15 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 		return true, "no final status yet", nil
 	}
 
-	// Step 2: On success, save Deal data in the underlying Bucket thread. On
-	// failure save the error message. Also update status on Mongo for the archive.
+	// On success, save Deal data in the underlying Bucket thread. On failure,
+	// save the error message. Also update status on Mongo for the archive.
 	if job.Status == ffs.Success {
 		err := saveDealsInDB(ctx, pgClient, storageDeal.FFSToken, mycid)
 		if err != nil {
 			return true, fmt.Sprintf("saving deal data in archive: %s", err), nil
 		}
 	} else {
-		log.Println("job.Status", ffs.JobStatusStr[job.Status], job.Status)
+		log.Info("job.Status", ffs.JobStatusStr[job.Status], job.Status)
 		dataservice.UpdateStorageDeal(mycid.String(), 2, "failed to create filecoin storage deal", "", "", 0)
 	}
 
@@ -124,21 +121,22 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 
 	proposals := sh.GetCidInfo().GetCold().GetFilecoin().GetProposals()
 
-	fmt.Println("proposals", proposals)
+	log.Info("proposals", proposals)
+
 	if len(proposals) > 0 {
 		for _, prop := range proposals {
 			priceAttoFIL := prop.EpochPrice * uint64(prop.Duration)
 			priceAttoFILBigInt := new(big.Int).SetUint64(priceAttoFIL)
 			priceFIL := float64(priceAttoFIL) * math.Pow(10, -18)
-			fmt.Println(priceFIL)
-			fmt.Println("***********************")
-			fmt.Println("ProposalCid", prop.ProposalCid)
-			fmt.Println("Renewed", prop.Renewed)
-			fmt.Println("Miner", prop.Miner)
-			fmt.Println("StartEpoch", prop.StartEpoch)
-			fmt.Println("ActivationEpoch", prop.ActivationEpoch)
-			fmt.Println("Duration", prop.Duration)
-			fmt.Println("EpochPrice", prop.EpochPrice)
+			log.Info("priceAttoFIL", priceAttoFIL, "priceAttoFILBigInt", priceAttoFILBigInt, "priceFIL", priceFIL)
+
+			log.Info("ProposalCid", prop.ProposalCid)
+			log.Info("Renewed", prop.Renewed)
+			log.Info("Miner", prop.Miner)
+			log.Info("StartEpoch", prop.StartEpoch)
+			log.Info("ActivationEpoch", prop.ActivationEpoch)
+			log.Info("Duration", prop.Duration)
+			log.Info("EpochPrice", prop.EpochPrice)
 
 			dataservice.UpdateStorageDeal(c.String(), 1, "stored in filecoin", prop.Miner, priceAttoFILBigInt.String(), 0)
 		}

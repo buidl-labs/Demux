@@ -3,7 +3,6 @@ package routes
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -13,11 +12,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	powc "github.com/textileio/powergate/api/client"
-	// "github.com/textileio/powergate/ffs"
-	// "github.com/textileio/powergate/health"
 )
 
-type Data struct {
+// VideoData contains some data which is used to predict the streaming cost.
+type VideoData struct {
 	StorageDuration int64 `json:"storage_duration"`
 	VideoFileSize   int64 `json:"video_file_size"`
 	VideoDuration   int64 `json:"video_duration"`
@@ -29,23 +27,21 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 	if r.Method == "POST" {
-
 		var responded = false
 
 		decoder := json.NewDecoder(r.Body)
-		var d Data
+		var d VideoData
 		err := decoder.Decode(&d)
 		if err != nil {
-			fmt.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			data := map[string]interface{}{
+				"error": "please specify a value of `storage_duration` between 2628003 and 315360000",
+			}
+			util.WriteResponse(data, w)
+			log.Errorln(err)
 			responded = true
 			return
 		}
-		log.Println(d.StorageDuration)
-		log.Println(d.VideoFileSize)
-		log.Println(d.VideoDuration)
-		videoDurationInt := d.VideoDuration
-		storageDurationInt := d.StorageDuration
-		videoFileSize := uint64(d.VideoFileSize)
 
 		if d.StorageDuration > 315360000 || d.StorageDuration < 2628003 {
 			w.WriteHeader(http.StatusExpectationFailed)
@@ -75,64 +71,25 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// storageDuration := r.FormValue("storage_duration")
-		// storageDurationInt, _ := strconv.ParseInt(storageDuration, 10, 64)
-		// fmt.Println("storageDurationInt", storageDurationInt)
-		// // 1 month <= storageDurationInt <= 10 years
-		// if storageDurationInt > 315360000 || storageDurationInt < 2628003 {
-		// 	w.WriteHeader(http.StatusExpectationFailed)
-		// 	data := map[string]interface{}{
-		// 		"error": "please specify a value of `storage_duration` between 2628003 and 315360000",
-		// 	}
-		// 	util.WriteResponse(data, w)
-		// 	responded = true
-		// 	return
-		// }
-
-		// videoDuration := r.FormValue("video_duration")
-		// videoDurationInt, _ := strconv.ParseInt(videoDuration, 10, 64)
-		// fmt.Println("videoDurationInt", videoDurationInt)
-		// if videoDurationInt < 1 {
-		// 	w.WriteHeader(http.StatusExpectationFailed)
-		// 	data := map[string]interface{}{
-		// 		"error": "please specify a value of `video_duration` >= 1",
-		// 	}
-		// 	util.WriteResponse(data, w)
-		// 	responded = true
-		// 	return
-		// }
-
-		// videoFileSizeStr := r.FormValue("video_file_size")
-		// videoFileSizeInt, _ := strconv.ParseInt(videoFileSizeStr, 10, 64)
-		// fmt.Println("videoFileSizeInt", videoFileSizeInt)
-		// if videoFileSizeInt <= 0 {
-		// 	w.WriteHeader(http.StatusExpectationFailed)
-		// 	data := map[string]interface{}{
-		// 		"error": "please specify a value of `video_file_size` > 0",
-		// 	}
-		// 	util.WriteResponse(data, w)
-		// 	responded = true
-		// 	return
-		// }
-		// videoFileSize := uint64(videoFileSizeInt)
-		// log.Println("videoFileSize:", videoFileSize)
+		videoDurationInt := d.VideoDuration
+		storageDurationInt := d.StorageDuration
+		videoFileSize := uint64(d.VideoFileSize)
 
 		transcodingCostWEI, err := util.CalculateTranscodingCost("", float64(videoDurationInt))
 		if err != nil {
-			// TODO: handle this case
-			log.Println(err)
+			log.Warn("Couldn't calculate transcoding cost:", err)
 			transcodingCostWEI = big.NewInt(0)
 		}
 
-		// TODO: Calculate powergate (filecoin) storage price
+		// Calculate powergate (filecoin) storage price
 
 		estimatedPrice := float64(0)
 
-		duration := float64(storageDurationInt) //duration of deal in seconds (provided by user)
+		duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 		epochs := float64(duration / float64(30))
-		folderSize := getFolderSizeEstimate(float64(videoFileSize)) //size of folder in MiB (to be predicted by estimation algorithm)
-		fmt.Println("folderSize", folderSize, "videoFileSize", videoFileSize)
-		fmt.Println("duration", duration, "epochs", epochs)
+		folderSize := getFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
+		log.Info("folderSize", folderSize, "videoFileSize", videoFileSize)
+		log.Info("duration", duration, "epochs", epochs)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -145,12 +102,9 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		index, err := pgClient.Asks.Get(ctx)
 		if err != nil {
-			log.Errorf("getting asks: %s", err)
+			log.Warn("getting asks:", err)
 		}
 		if len(index.Storage) > 0 {
-			log.Printf("Storage median price: %v\n", index.StorageMedianPrice)
-			log.Printf("Last updated: %v\n", index.LastUpdated.Format("01/02/06 15:04 MST"))
-			// fmt.Println("index:\n", index)
 			data := make([][]string, len(index.Storage))
 			i := 0
 			pricesSum := 0
@@ -163,15 +117,11 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 					strconv.FormatInt(ask.Timestamp, 10),
 					strconv.FormatInt(ask.Expiry, 10),
 				}
-				// fmt.Printf("ask %d: %v\n", i, data[i])
 				i++
 			}
 			meanEpochPrice := float64(float64(pricesSum) / float64(len(index.Storage)))
-			fmt.Println("pricesSum", pricesSum)
-			fmt.Println("meanEpochPrice", meanEpochPrice)
 			estimatedPrice = meanEpochPrice * float64(epochs) * folderSize / float64(1024)
-			fmt.Println("estimatedPrice", estimatedPrice)
-			// estimatedPrice = int64(estimatedPrice)
+			log.Info("estimatedPrice", estimatedPrice, ", meanEpochPrice", meanEpochPrice, ", pricesSum", pricesSum)
 		}
 
 		// TODO: Convert total price to USD and return
@@ -188,8 +138,6 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 }
 func getFolderSizeEstimate(fileSize float64) float64 {
 	msr := dataservice.GetMeanSizeRatio()
-	fmt.Println("MeanSizeRatio", msr.MeanSizeRatio)
-	fmt.Println("fileSize", fileSize)
 
 	return fileSize * float64(msr.MeanSizeRatio)
 }

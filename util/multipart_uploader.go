@@ -1,3 +1,7 @@
+/*
+This file has been taken from https://github.com/ItalyPaleAle/pinatapinner/blob/master/multipart-uploader.go
+*/
+
 /* Adapted from https://github.com/ipsusila/gogo/blob/master/http/formuploader.go */
 
 /*

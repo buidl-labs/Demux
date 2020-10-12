@@ -50,7 +50,6 @@ func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, s
 	var expiry int
 	var staged bool = false
 	var powCloseError error
-	fmt.Println("TM", trustedMiners)
 
 	// Create a new powergate client
 	c, err := client.NewClient(setup.PowergateAddr)
@@ -65,7 +64,7 @@ func RunPow(ctx context.Context, setup PowergateSetup, fName string) (cid.Cid, s
 	}
 
 	if err := sanityCheck(ctx, c); err != nil {
-		fmt.Println("issuesanity", err)
+		log.Error(err)
 		return currCid, fName, minerName, tok, jid, storagePrice, expiry, staged, fmt.Errorf("sanity check with client: %s", err)
 	}
 
@@ -155,8 +154,8 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 }
 
 func run(ctx context.Context, c *client.Client, id int, size int64, addr string, fName string, minerName string, tok string, storagePrice int, expiry int) (cid.Cid, string, string, string, string, int, int, bool, error) {
-	log.Infof("[%d] Executing run...", id)
-	defer log.Infof("[%d] Done", id)
+	log.Infof("[%d] Executing run...\n", id)
+	defer log.Infof("[%d] Done\n", id)
 
 	var ci cid.Cid
 	var jid string
@@ -185,7 +184,7 @@ func run(ctx context.Context, c *client.Client, id int, size int64, addr string,
 		defer func() {
 			e := f.Close()
 			if e != nil {
-				log.Infof("closing file: %s", e)
+				log.Warnf("closing file: %s\n", e)
 			}
 		}()
 

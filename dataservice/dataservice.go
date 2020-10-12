@@ -2,7 +2,6 @@ package dataservice
 
 import (
 	"database/sql"
-	"fmt"
 
 	"github.com/buidl-labs/Demux/model"
 
@@ -492,6 +491,5 @@ func GetMeanSizeRatio() model.MeanSizeRatio {
 		rows.Scan(&x.MeanSizeRatio, &x.RatioSum, &x.Count)
 		data = append(data, x)
 	}
-	fmt.Println("here", x)
 	return x
 }
