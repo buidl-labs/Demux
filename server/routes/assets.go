@@ -50,7 +50,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				_ = stdout
 
 				// Create a new asset.
-				dataservice.CreateAsset(model.Asset{
+				dataservice.InsertAsset(model.Asset{
 					AssetID:         id.String(),
 					AssetReady:      false,
 					AssetStatusCode: 0,
@@ -61,7 +61,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				})
 
 				// Create a new upload.
-				dataservice.CreateUpload(model.Upload{
+				dataservice.InsertUpload(model.Upload{
 					AssetID: id.String(),
 					URL:     os.Getenv("DEMUX_URL") + "fileupload/" + id.String(),
 					Status:  false,

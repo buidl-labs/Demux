@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	dataservice.InitDB()
+	dataservice.InitMongoClient()
 	go util.RunPoller()
 	server.StartServer(":" + os.Getenv("PORT"))
 }
