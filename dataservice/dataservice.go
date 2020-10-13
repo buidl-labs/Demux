@@ -1,495 +1,367 @@
 package dataservice
 
 import (
-	"database/sql"
+	"context"
+	"os"
 
 	"github.com/buidl-labs/Demux/model"
 
-	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-const dbFilePath = "./DemuxDB.sqlite3"
+var (
+	dbName                    = "demux"
+	connectionString          = os.Getenv("MONGO_URI")
+	assetCollection           *mongo.Collection
+	uploadCollection          *mongo.Collection
+	transcodingDealCollection *mongo.Collection
+	storageDealCollection     *mongo.Collection
+	userCollection            *mongo.Collection
+	sizeRatioCollection       *mongo.Collection
+	meanSizeRatioCollection   *mongo.Collection
+)
 
-var sqldb *sql.DB
+// InitMongoClient initializes the mongo client.
+func InitMongoClient() {
+	// Set client options
+	clientOptions := options.Client().ApplyURI(connectionString)
 
-// InitDB initializes the Demux database.
-func InitDB() {
-	database, err := sql.Open("sqlite3", dbFilePath)
+	// connect to MongoDB
+	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	sqldb = database
-
-	statement, err := database.Prepare(`
-		CREATE TABLE IF NOT EXISTS Asset (
-			AssetID                  TEXT PRIMARY KEY,
-			AssetReady               BOOLEAN,
-			AssetStatusCode          INT,
-			AssetStatus              TEXT,
-			AssetError               BOOLEAN,
-			StreamURL                TEXT,
-			Thumbnail                TEXT,
-			CreatedAt                INT
-			CHECK (AssetStatusCode >= 0 AND AssetStatusCode <= 4)
-		)
-	`)
-
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
+		log.Fatal(err)
 	}
 
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS Upload (
-			AssetID         TEXT PRIMARY KEY,
-			URL             TEXT,
-			Status          BOOLEAN
-		)
-	`)
-
+	// Check the connection
+	err = client.Ping(context.TODO(), nil)
 	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
+		log.Fatal(err)
 	}
 
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS TranscodingDeal (
-			AssetID                  TEXT PRIMARY KEY,
-			TranscodingCost          TEXT,
-			TranscodingCostEstimated TEXT
-		)
-	`)
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
+	log.Info("Connected to MongoDB!")
 
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS StorageDeal (
-			AssetID              TEXT PRIMARY KEY,
-			StorageStatusCode    INT,
-			StorageStatus        TEXT,
-			CID                  TEXT,
-			Miner                TEXT,
-			StorageCost          TEXT,
-			StorageCostEstimated TEXT,
-			FilecoinDealExpiry   BIGINT,
-			FFSToken             TEXT,
-			JobID                TEXT
-		)
-	`)
+	assetCollection = client.Database(dbName).Collection("asset")
+	uploadCollection = client.Database(dbName).Collection("upload")
+	transcodingDealCollection = client.Database(dbName).Collection("transcodingDeal")
+	storageDealCollection = client.Database(dbName).Collection("storageDeal")
+	userCollection = client.Database(dbName).Collection("user")
+	sizeRatioCollection = client.Database(dbName).Collection("sizeRatio")
+	meanSizeRatioCollection = client.Database(dbName).Collection("meanSizeRatio")
 
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS User (
-			Name          TEXT,
-			TokenID       TEXT,
-			Digest        TEXT PRIMARY KEY,
-			AssetCount    INT,
-			CreatedAt     DATETIME DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS SizeRatio (
-			AssetID           TEXT PRIMARY KEY,
-			SizeRatio         DOUBLE,
-			VideoFileSize     INT,
-			StreamFolderSize  INT
-		)
-	`)
-
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-
-	statement, err = database.Prepare(`
-		CREATE TABLE IF NOT EXISTS MeanSizeRatio (
-			MeanSizeRatio  DOUBLE,
-			RatioSum       DOUBLE,
-			Count          INT
-		)
-	`)
-
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		log.Fatalln("Error in creating DB", err)
-	}
-
-	log.Info("DB created successfully.")
+	log.Info("Collections created!")
 }
 
-// CreateAsset creates a new asset.
-func CreateAsset(x model.Asset) {
-	statement, err := sqldb.Prepare("INSERT INTO Asset (AssetID, AssetReady, AssetStatusCode, AssetStatus, AssetError, StreamURL, Thumbnail, CreatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+// InsertAsset inserts an asset in the DB
+func InsertAsset(asset model.Asset) {
+	insertResult, err := assetCollection.InsertOne(context.Background(), asset)
 	if err != nil {
-		log.Println("Error in inserting Asset", x.AssetID)
-		log.Println(err)
+		log.Error("Inserting an asset", err)
 	}
-	_, err = statement.Exec(x.AssetID, x.AssetReady, x.AssetStatusCode, x.AssetStatus, x.AssetError, x.StreamURL, x.Thumbnail, x.CreatedAt)
-	if err != nil {
-		log.Println("Error in inserting Asset", x.AssetID)
-		log.Println(err)
-	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
 }
 
-// CreateUpload creates a new upload.
-func CreateUpload(x model.Upload) {
-	statement, err := sqldb.Prepare("INSERT INTO Upload (AssetID, URL, Status) VALUES (?, ?, ?)")
+// InsertUpload inserts an upload in the DB
+func InsertUpload(upload model.Upload) {
+	insertResult, err := uploadCollection.InsertOne(context.Background(), upload)
 	if err != nil {
-		log.Println("Error in inserting Upload", x.AssetID)
-		log.Println(err)
+		log.Error("Inserting an upload:", err)
 	}
-	_, err = statement.Exec(x.AssetID, x.URL, x.Status)
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
+}
+
+// InsertTranscodingDeal inserts a transcodingDeal in the DB
+func InsertTranscodingDeal(transcodingDeal model.TranscodingDeal) {
+	insertResult, err := transcodingDealCollection.InsertOne(context.Background(), transcodingDeal)
 	if err != nil {
-		log.Println("Error in inserting Upload", x.AssetID)
-		log.Println(err)
+		log.Error("Inserting a transcodingDeal:", err)
 	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
+}
+
+// InsertStorageDeal inserts a storageDeal in the DB
+func InsertStorageDeal(storageDeal model.StorageDeal) {
+	insertResult, err := storageDealCollection.InsertOne(context.Background(), storageDeal)
+
+	if err != nil {
+		log.Error("Inserting a storageDeal:", err)
+	}
+
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
+}
+
+// InsertUser inserts a storageDeal in the DB
+func InsertUser(user model.User) {
+	insertResult, err := userCollection.InsertOne(context.Background(), user)
+	if err != nil {
+		log.Error("Inserting a user:", err)
+	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
+}
+
+// InsertSizeRatio inserts a sizeRatio in the DB
+func InsertSizeRatio(sizeRatio model.SizeRatio) {
+	insertResult, err := sizeRatioCollection.InsertOne(context.Background(), sizeRatio)
+	if err != nil {
+		log.Error("Inserting a sizeRatio:", err)
+	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
+}
+
+// InsertMeanSizeRatio inserts an upload in the DB
+func InsertMeanSizeRatio(meanSizeRatio model.SizeRatio) {
+	insertResult, err := meanSizeRatioCollection.InsertOne(context.Background(), meanSizeRatio)
+	if err != nil {
+		log.Error("Inserting a meanSizeRatio:", err)
+	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
 }
 
 // UpdateAssetStatus updates the status of an asset.
 func UpdateAssetStatus(assetID string, assetStatusCode uint32, assetStatus string, assetError bool) {
-	statement, err := sqldb.Prepare("UPDATE Asset SET AssetStatusCode=?, AssetStatus=?, AssetError=? WHERE AssetID=?")
+	filter := bson.M{"_id": assetID}
+	update := bson.M{"$set": bson.M{
+		"asset_status_code": assetStatusCode,
+		"asset_status":      assetStatus,
+		"asset_error":       assetError,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating asset", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(assetStatusCode, assetStatus, assetError, assetID)
-	if err != nil {
-		log.Println("Error in updating asset", assetID)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // UpdateUploadStatus updates the status of an upload.
 func UpdateUploadStatus(assetID string, status bool) {
-	statement, err := sqldb.Prepare("UPDATE Upload SET Status=? WHERE AssetID=?")
+	filter := bson.M{"_id": assetID}
+	update := bson.M{"$set": bson.M{
+		"status": status,
+	}}
+	result, err := uploadCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating upload", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(status, assetID)
-	if err != nil {
-		log.Println("Error in updating upload", assetID)
-		log.Println(err)
-	}
-}
-
-// CreateTranscodingDeal creates a new transcoding deal.
-func CreateTranscodingDeal(x model.TranscodingDeal) {
-	statement, err := sqldb.Prepare("INSERT INTO TranscodingDeal (AssetID, TranscodingCost, TranscodingCostEstimated) VALUES (?, ?, ?)")
-	if err != nil {
-		log.Println("Error in inserting TranscodingDeal", x.AssetID)
-		log.Println(err)
-	}
-	_, err = statement.Exec(x.AssetID, x.TranscodingCost, x.TranscodingCostEstimated)
-	if err != nil {
-		log.Println("Error in inserting TranscodingDeal", x.AssetID)
-		log.Println(err)
-	}
-}
-
-// CreateStorageDeal creates a new storage deal.
-func CreateStorageDeal(x model.StorageDeal) {
-	statement, err := sqldb.Prepare("INSERT INTO StorageDeal (AssetID, StorageStatusCode, StorageStatus, CID, Miner, StorageCost, StorageCostEstimated, FilecoinDealExpiry, FFSToken, JobID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-	if err != nil {
-		log.Println("Error in inserting StorageDeal", x.AssetID)
-		log.Println(err)
-	}
-	_, err = statement.Exec(x.AssetID, x.StorageStatusCode, x.StorageStatus, x.CID, x.Miner, x.StorageCost, x.StorageCostEstimated, x.FilecoinDealExpiry, x.FFSToken, x.JobID)
-	if err != nil {
-		log.Println("Error in inserting StorageDeal", x.AssetID)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // IfAssetExists checks whether a given asset exists in the database.
 func IfAssetExists(assetID string) bool {
-	count := 0
-	rows, err := sqldb.Query("SELECT * FROM Asset WHERE AssetID=?", assetID)
+	result := model.Asset{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := assetCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in checking existence of asset", assetID)
-		log.Println(err)
-	}
-	for rows.Next() {
-		count++
-	}
-	if count == 0 {
+		log.Error(err)
 		return false
 	}
+	log.Info("got asset", result)
 	return true
 }
 
 // IfUploadExists checks whether a given upload exists in the database.
 func IfUploadExists(assetID string) bool {
-	count := 0
-	rows, err := sqldb.Query("SELECT * FROM Upload WHERE AssetID=?", assetID)
+	result := model.Upload{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := uploadCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in checking existence of upload", assetID)
-		log.Println(err)
-	}
-	for rows.Next() {
-		count++
-	}
-	if count == 0 {
+		log.Error(err)
 		return false
 	}
+	log.Info("got upload", result)
 	return true
 }
 
 // GetAsset returns an asset.
 func GetAsset(assetID string) model.Asset {
-	rows, err := sqldb.Query("SELECT * FROM Asset WHERE AssetID=?", assetID)
+	result := model.Asset{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := assetCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in getting asset", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	var data []model.Asset
-	x := model.Asset{}
-	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.AssetReady, &x.AssetStatusCode, &x.AssetStatus, &x.AssetError, &x.StreamURL, &x.Thumbnail, &x.CreatedAt)
-		data = append(data, x)
-	}
-	return x
+	log.Info("got", result)
+	return result
 }
 
 // GetUpload returns an upload.
 func GetUpload(assetID string) model.Upload {
-	rows, err := sqldb.Query("SELECT * FROM Upload WHERE AssetID=?", assetID)
+	result := model.Upload{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := uploadCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in getting upload", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	var data []model.Upload
-	x := model.Upload{}
-	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.URL, &x.Status)
-		data = append(data, x)
-	}
-	return x
+	log.Info("got", result)
+	return result
 }
 
 // GetTranscodingDeal returns a transcoding deal.
 func GetTranscodingDeal(assetID string) model.TranscodingDeal {
-	rows, err := sqldb.Query("SELECT * FROM TranscodingDeal WHERE AssetID=?", assetID)
+	result := model.TranscodingDeal{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := transcodingDealCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in getting TranscodingDeal", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	data := []model.TranscodingDeal{}
-	x := model.TranscodingDeal{}
-	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.TranscodingCost, &x.TranscodingCostEstimated)
-		data = append(data, x)
-	}
-	return x
+	log.Info("got", result)
+	return result
 }
 
 // GetStorageDeal returns a storage deal.
 func GetStorageDeal(assetID string) model.StorageDeal {
-	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE AssetID=?", assetID)
+	result := model.StorageDeal{}
+	filter := bson.D{primitive.E{Key: "_id", Value: assetID}}
+	err := storageDealCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in getting StorageDeal", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	data := []model.StorageDeal{}
-	x := model.StorageDeal{}
-	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.StorageStatusCode, &x.StorageStatus, &x.CID, &x.Miner, &x.StorageCost, &x.StorageCostEstimated, &x.FilecoinDealExpiry, &x.FFSToken, &x.JobID)
-		data = append(data, x)
-	}
-	return x
+	log.Info("got", result)
+	return result
 }
 
 // GetPendingDeals returns the pending storage deals.
 func GetPendingDeals() []model.StorageDeal {
-	rows, err := sqldb.Query("SELECT * FROM StorageDeal WHERE StorageStatusCode=?", 0)
+	filter := bson.D{primitive.E{Key: "storage_status_code", Value: 0}}
+	cur, err := storageDealCollection.Find(context.Background(), filter)
 	if err != nil {
-		log.Println("Error in getting asset")
-		log.Println(err)
+		log.Error(err)
 	}
-	data := []model.StorageDeal{}
-	x := model.StorageDeal{}
-	for rows.Next() {
-		rows.Scan(&x.AssetID, &x.StorageStatusCode, &x.StorageStatus, &x.CID, &x.Miner, &x.StorageCost, &x.StorageCostEstimated, &x.FilecoinDealExpiry, &x.FFSToken, &x.JobID)
-		data = append(data, x)
+
+	var results []model.StorageDeal
+	for cur.Next(context.Background()) {
+		var result model.StorageDeal
+		e := cur.Decode(&result)
+		if e != nil {
+			log.Error(e)
+		}
+		results = append(results, result)
 	}
-	return data
+	if err := cur.Err(); err != nil {
+		log.Fatal(err)
+	}
+	cur.Close(context.Background())
+	return results
 }
 
 // UpdateStorageDeal updates a storage deal.
 func UpdateStorageDeal(CID string, storageStatusCode uint32, storageStatus string, miner string, storageCost string, filecoinDealExpiry int64) {
-	statement, err := sqldb.Prepare("UPDATE StorageDeal SET StorageStatusCode=?, StorageStatus=?, Miner=?, StorageCost=?, FilecoinDealExpiry=? WHERE CID=?")
+	filter := bson.M{"cid": CID}
+	update := bson.M{"$set": bson.M{
+		"storage_status_code":  storageStatusCode,
+		"storage_status":       storageStatus,
+		"miner":                miner,
+		"storage_cost":         storageCost,
+		"filecoin_deal_expiry": filecoinDealExpiry,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating storage deal having CID", CID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(storageStatusCode, storageStatus, miner, storageCost, filecoinDealExpiry, CID)
-	if err != nil {
-		log.Println("Error in updating storage deal having CID", CID)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // UpdateStreamURL updates the StreamURL of an asset.
 func UpdateStreamURL(assetID string, streamURL string) {
-	statement, err := sqldb.Prepare("UPDATE Asset SET StreamURL=? WHERE AssetID=?")
+	filter := bson.M{"_id": assetID}
+	update := bson.M{"$set": bson.M{
+		"stream_url": streamURL,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating streamURL for asset", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(streamURL, assetID)
-	if err != nil {
-		log.Println("Error in updating streamURL for asset", assetID)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // UpdateThumbnail updates the thumbnail of an asset.
 func UpdateThumbnail(assetID string, thumbnail string) {
-	statement, err := sqldb.Prepare("UPDATE Asset SET Thumbnail=? WHERE AssetID=?")
+	filter := bson.M{"_id": assetID}
+	update := bson.M{"$set": bson.M{
+		"thumbnail": thumbnail,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating thumbnail for asset", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(thumbnail, assetID)
-	if err != nil {
-		log.Println("Error in updating thumbnail for asset", assetID)
-		log.Println(err)
-	}
-}
-
-// CreateUser creates a new user.
-func CreateUser(x model.User) {
-	statement, err := sqldb.Prepare("INSERT INTO User (Name, TokenID, Digest, AssetCount, CreatedAt) VALUES (?, ?, ?, ?, ?)")
-	if err != nil {
-		log.Println("Error in inserting User", x.Name)
-		log.Println(err)
-	}
-	_, err = statement.Exec(x.Name, x.TokenID, x.Digest, x.AssetCount, x.CreatedAt)
-	if err != nil {
-		log.Println("Error in inserting User", x.Name)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // IfUserExists checks whether a user having a given digest exists in the database.
 func IfUserExists(digest string) bool {
-	count := 0
-	rows, err := sqldb.Query("SELECT * FROM User WHERE Digest=?", digest)
+	result := model.User{}
+	filter := bson.D{primitive.E{Key: "digest", Value: digest}}
+	err := userCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in checking existence of user", digest)
-		log.Println(err)
-	}
-	for rows.Next() {
-		count++
-	}
-	if count == 0 {
+		log.Error(err)
 		return false
 	}
+	log.Info("got user", result)
 	return true
 }
 
 // IncrementUserAssetCount increments a user's AssetCount by 1.
 func IncrementUserAssetCount(digest string) {
-	statement, err := sqldb.Prepare("UPDATE User SET AssetCount = AssetCount + 1 WHERE Digest=?")
+	result, err := userCollection.UpdateOne(context.Background(), bson.M{
+		"digest": digest,
+	}, bson.D{
+		primitive.E{Key: "$inc", Value: bson.D{primitive.E{Key: "asset_count", Value: 1}}},
+	}, options.Update().SetUpsert(true))
 	if err != nil {
-		log.Println("Error in updating assetCount for user", digest)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(digest)
-	if err != nil {
-		log.Println("Error in updating assetCount for user", digest)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // UpdateAssetReady updates the "ready" state of an asset.
 func UpdateAssetReady(assetID string, assetReady bool) {
-	statement, err := sqldb.Prepare("UPDATE Asset SET AssetReady=? WHERE AssetID=?")
+	filter := bson.M{"_id": assetID}
+	update := bson.M{"$set": bson.M{
+		"asset_ready": assetReady,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating asset", assetID)
-		log.Println(err)
+		log.Error(err)
 	}
-	_, err = statement.Exec(assetReady, assetID)
-	if err != nil {
-		log.Println("Error in updating asset", assetID)
-		log.Println(err)
-	}
+	log.Info("modified count:", result.ModifiedCount)
 }
 
 // AddSizeRatio adds a new SizeRatio.
 func AddSizeRatio(x model.SizeRatio) {
-	statement, err := sqldb.Prepare("INSERT INTO SizeRatio (AssetID, SizeRatio, VideoFileSize, StreamFolderSize) VALUES (?, ?, ?, ?)")
+	insertResult, err := sizeRatioCollection.InsertOne(context.Background(), x)
 	if err != nil {
-		log.Println("Error in inserting SizeRatio for asset", x.AssetID)
-		log.Println(err)
+		log.Error("Inserting a sizeRatio", err)
 	}
-	_, err = statement.Exec(x.AssetID, x.SizeRatio, x.VideoFileSize, x.StreamFolderSize)
-	if err != nil {
-		log.Println("Error in inserting SizeRatio for asset", x.AssetID)
-		log.Println(err)
-	}
+	log.Info("Inserted a Single Record ", insertResult.InsertedID)
 }
 
 // UpdateMeanSizeRatio updates the mean size ratio .
 func UpdateMeanSizeRatio(ratio float64, ratioSum float64, count uint64) {
-	statement, err := sqldb.Prepare("UPDATE MeanSizeRatio SET MeanSizeRatio=?, RatioSum=?, Count=?")
+	filter := bson.M{"_id": 1}
+	update := bson.M{"$set": bson.M{
+		"ratio":     ratio,
+		"ratio_sum": ratioSum,
+		"count":     count,
+	}}
+	result, err := meanSizeRatioCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Println("Error in updating MeanSizeRatio", ratio)
-		log.Println(err)
+		log.Error("UpdateMeanSizeRatio: ", err)
+		return
 	}
-	_, err = statement.Exec(ratio, ratioSum, count)
-	if err != nil {
-		log.Println("Error in updating MeanSizeRatio", ratio)
-		log.Println(err)
-	}
+	log.Info("UpdateMeanSizeRatio modified count: ", result.ModifiedCount)
 }
 
 // GetMeanSizeRatio returns the current mean size ratio.
 func GetMeanSizeRatio() model.MeanSizeRatio {
-	rows, err := sqldb.Query("SELECT * FROM MeanSizeRatio")
+	result := model.MeanSizeRatio{}
+	filter := bson.D{primitive.E{Key: "_id", Value: 1}}
+	err := meanSizeRatioCollection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
-		log.Println("Error in getting MeanSizeRatio")
-		log.Println(err)
+		log.Error(err)
 	}
-	data := []model.MeanSizeRatio{}
-	x := model.MeanSizeRatio{}
-	for rows.Next() {
-		rows.Scan(&x.MeanSizeRatio, &x.RatioSum, &x.Count)
-		data = append(data, x)
-	}
-	return x
+	log.Info("GetMeanSizeRatio ", result)
+	return result
 }

@@ -12,4 +12,5 @@ require (
 	github.com/rs/cors v1.7.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/textileio/powergate v0.6.5
+	go.mongodb.org/mongo-driver v1.4.2
 )

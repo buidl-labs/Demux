@@ -330,7 +330,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					// Couldn't calculate transcoding cost. Set it to 0
 				}
 
-				dataservice.CreateTranscodingDeal(model.TranscodingDeal{
+				dataservice.InsertTranscodingDeal(model.TranscodingDeal{
 					AssetID:                  assetID,
 					TranscodingCost:          big.NewInt(0).String(),
 					TranscodingCostEstimated: transcodingCostEstimated.String(),
@@ -475,7 +475,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 						log.Infof("CID: %s, currFolderName: %s\n", currCIDStr, currFolderName)
 
-						dataservice.CreateStorageDeal(model.StorageDeal{
+						dataservice.InsertStorageDeal(model.StorageDeal{
 							AssetID:              assetID,
 							StorageStatusCode:    0,
 							StorageStatus:        "pinned to ipfs, attempting to store in filecoin",
@@ -509,7 +509,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 				log.Infof("CID: %s, currFolderName: %s\n", currCIDStr, currFolderName)
 
-				dataservice.CreateStorageDeal(model.StorageDeal{
+				dataservice.InsertStorageDeal(model.StorageDeal{
 					AssetID:              assetID,
 					StorageStatusCode:    0,
 					StorageStatus:        "pinned to ipfs, attempting to store in filecoin",
