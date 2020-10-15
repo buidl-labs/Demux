@@ -83,7 +83,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Calculate powergate (filecoin) storage price
 
-		estimatedPrice := float64(0)
+		estimatedPrice := big.NewInt(0)
 
 		duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 		epochs := float64(duration / float64(30))
@@ -107,9 +107,10 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		if len(index.Storage) > 0 {
 			data := make([][]string, len(index.Storage))
 			i := 0
-			pricesSum := 0
+			pricesSum := big.NewInt(0)
 			for _, ask := range index.Storage {
-				pricesSum += int(ask.Price)
+				currPrice := big.NewInt(int64(ask.Price))
+				pricesSum.Add(pricesSum, currPrice)
 				data[i] = []string{
 					ask.Miner,
 					strconv.Itoa(int(ask.Price)),
@@ -119,8 +120,14 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				i++
 			}
-			meanEpochPrice := float64(float64(pricesSum) / float64(len(index.Storage)))
-			estimatedPrice = meanEpochPrice * float64(epochs) * folderSize / float64(1024)
+			lenIdx := big.NewInt(int64(len(index.Storage)))
+			meanEpochPrice := new(big.Int).Div(pricesSum, lenIdx)
+			epochsBigInt := big.NewInt(int64(epochs))
+			folderSizeBigInt := big.NewInt(int64(folderSize))
+			bigInt1024 := big.NewInt(1024)
+			estimatedPrice.Mul(meanEpochPrice, epochsBigInt)
+			estimatedPrice.Mul(estimatedPrice, folderSizeBigInt)
+			estimatedPrice = new(big.Int).Div(estimatedPrice, bigInt1024)
 			log.Info("estimatedPrice", estimatedPrice, ", meanEpochPrice", meanEpochPrice, ", pricesSum", pricesSum)
 		}
 
@@ -130,7 +137,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
 				"transcoding_cost_estimated": transcodingCostWEI,
-				"storage_cost_estimated":     int64(estimatedPrice),
+				"storage_cost_estimated":     estimatedPrice,
 			}
 			util.WriteResponse(data, w)
 		}
