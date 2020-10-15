@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/big"
 	"net/http"
 	"os"
@@ -402,6 +403,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				dirsize = dirsize / (1024 * 1024)
 				videoFileSize = videoFileSize / (1024 * 1024)
 				ratio := float64(dirsize) / float64(videoFileSize)
+				ratio = math.Round(ratio*100) / 100
 				dataservice.AddSizeRatio(model.SizeRatio{
 					AssetID:          assetID,
 					SizeRatio:        ratio,
@@ -409,13 +411,13 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					StreamFolderSize: dirsize,
 				})
 				msr := dataservice.GetMeanSizeRatio()
-				currRatioSum := msr.RatioSum
+				currRatioSum := math.Round(msr.RatioSum*100) / 100
 				currCount := msr.Count
-				dataservice.UpdateMeanSizeRatio((ratio+currRatioSum)/float64(currCount+1), ratio+currRatioSum, currCount+1)
+				dataservice.UpdateMeanSizeRatio(math.Round(((ratio+currRatioSum)/float64(currCount+1))*100)/100, ratio+currRatioSum, currCount+1)
 
 				// Compute estimated storage price
 
-				estimatedPrice := float64(0)
+				estimatedPrice := big.NewInt(0)
 				storageDurationInt := 31536000          // deal duration currently set to 1 year. 15768000-> 6 months
 				duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 				epochs := float64(duration / float64(30))
@@ -439,9 +441,10 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				if len(index.Storage) > 0 {
 					data := make([][]string, len(index.Storage))
 					i := 0
-					pricesSum := 0
+					pricesSum := big.NewInt(0)
 					for _, ask := range index.Storage {
-						pricesSum += int(ask.Price)
+						currPrice := big.NewInt(int64(ask.Price))
+						pricesSum.Add(pricesSum, currPrice)
 						data[i] = []string{
 							ask.Miner,
 							strconv.Itoa(int(ask.Price)),
@@ -451,8 +454,14 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						}
 						i++
 					}
-					meanEpochPrice := float64(float64(pricesSum) / float64(len(index.Storage)))
-					estimatedPrice = meanEpochPrice * float64(epochs) * float64(folderSize) / float64(1024)
+					lenIdx := big.NewInt(int64(len(index.Storage)))
+					meanEpochPrice := new(big.Int).Div(pricesSum, lenIdx)
+					epochsBigInt := big.NewInt(int64(epochs))
+					folderSizeBigInt := big.NewInt(int64(folderSize))
+					bigInt1024 := big.NewInt(1024)
+					estimatedPrice.Mul(meanEpochPrice, epochsBigInt)
+					estimatedPrice.Mul(estimatedPrice, folderSizeBigInt)
+					estimatedPrice = new(big.Int).Div(estimatedPrice, bigInt1024)
 					log.Info("estimatedPrice", estimatedPrice, ", meanEpochPrice", meanEpochPrice, ", pricesSum", pricesSum)
 				}
 
@@ -482,7 +491,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 							CID:                  currCIDStr,
 							Miner:                "",
 							StorageCost:          big.NewInt(0).String(),
-							StorageCostEstimated: big.NewInt(int64(estimatedPrice)).String(),
+							StorageCostEstimated: estimatedPrice.String(),
 							FilecoinDealExpiry:   int64(0),
 							FFSToken:             tok,
 							JobID:                jid,
@@ -516,7 +525,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					CID:                  currCIDStr,
 					Miner:                "",
 					StorageCost:          big.NewInt(0).String(),
-					StorageCostEstimated: big.NewInt(int64(estimatedPrice)).String(),
+					StorageCostEstimated: estimatedPrice.String(),
 					FilecoinDealExpiry:   int64(0),
 					FFSToken:             tok,
 					JobID:                jid,
