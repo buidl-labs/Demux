@@ -108,7 +108,6 @@ func runSetup(ctx context.Context, c *client.Client, setup PowergateSetup, fName
 	if err != nil {
 		return currCid, fName, minerName, tok, jid, storagePrice, expiry, staged, fmt.Errorf("getting instance info: %s", err)
 	}
-	log.Infof("ffs info: [%v]\n", info)
 
 	// Asks index
 	index, err := c.Asks.Get(ctx)

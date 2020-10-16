@@ -87,7 +87,16 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 		epochs := float64(duration / float64(30))
-		folderSize := getFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
+		folderSize, err := getFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
+		if err != nil {
+			w.WriteHeader(http.StatusExpectationFailed)
+			data := map[string]interface{}{
+				"error": "estimating folder size",
+			}
+			util.WriteResponse(data, w)
+			responded = true
+			return
+		}
 		log.Info("folderSize", folderSize, "videoFileSize", videoFileSize)
 		log.Info("duration", duration, "epochs", epochs)
 
@@ -143,8 +152,9 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-func getFolderSizeEstimate(fileSize float64) float64 {
-	msr := dataservice.GetMeanSizeRatio()
 
-	return fileSize * float64(msr.MeanSizeRatio)
+func getFolderSizeEstimate(fileSize float64) (float64, error) {
+	msr, err := dataservice.GetMeanSizeRatio()
+
+	return fileSize * float64(msr.MeanSizeRatio), err
 }
