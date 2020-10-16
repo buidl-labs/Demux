@@ -4,7 +4,7 @@ package model
 type Asset struct {
 	AssetID         string `bson:"_id" json:"_id"`
 	AssetReady      bool   `bson:"asset_ready" json:"asset_ready"`
-	AssetStatusCode uint32 `bson:"asset_status_code" json:"asset_status_code"`
+	AssetStatusCode int32  `bson:"asset_status_code" json:"asset_status_code"`
 	AssetStatus     string `bson:"asset_status" json:"asset_status"`
 	AssetError      bool   `bson:"asset_error" json:"asset_error"`
 	StreamURL       string `bson:"stream_url" json:"stream_url"`
@@ -17,6 +17,7 @@ type Upload struct {
 	AssetID string `bson:"_id" json:"_id"`
 	URL     string `bson:"url" json:"url"`
 	Status  bool   `bson:"status" json:"status"`
+	Error   bool   `bson:"error" json:"error"`
 }
 
 // TranscodingDeal is the type binding for a transcoding deal in the livepeer network.

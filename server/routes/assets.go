@@ -65,6 +65,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 					AssetID: id.String(),
 					URL:     os.Getenv("DEMUX_URL") + "fileupload/" + id.String(),
 					Status:  false,
+					Error:   false,
 				})
 
 				dataservice.IncrementUserAssetCount(sha256DigestStr)
@@ -104,54 +105,63 @@ func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 
 		if dataservice.IfAssetExists(vars["asset_id"]) {
-			asset := dataservice.GetAsset(vars["asset_id"])
-			transcodingDeal := dataservice.GetTranscodingDeal(vars["asset_id"])
-			storageDeal := dataservice.GetStorageDeal(vars["asset_id"])
+			asset, err := dataservice.GetAsset(vars["asset_id"])
+			transcodingDeal, _ := dataservice.GetTranscodingDeal(vars["asset_id"])
+			storageDeal, _ := dataservice.GetStorageDeal(vars["asset_id"])
 
-			w.WriteHeader(http.StatusOK)
-			data := map[string]interface{}{
-				"asset_id":          asset.AssetID,
-				"asset_ready":       asset.AssetReady,
-				"asset_status_code": asset.AssetStatusCode,
-				"asset_status":      asset.AssetStatus,
-				"asset_error":       asset.AssetError,
-				"stream_url":        asset.StreamURL,
-				"thumbnail":         asset.Thumbnail,
-				"created_at":        asset.CreatedAt,
-			}
-			storageCostBigInt := new(big.Int)
-			storageCostBigInt, ok := storageCostBigInt.SetString(storageDeal.StorageCost, 10)
-			if !ok {
-				data["storage_cost"] = big.NewInt(0)
+			if err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				data := map[string]interface{}{
+					"asset_id": nil,
+					"error":    "no such asset",
+				}
+				util.WriteResponse(data, w)
 			} else {
-				data["storage_cost"] = storageCostBigInt
-			}
+				w.WriteHeader(http.StatusOK)
+				data := map[string]interface{}{
+					"asset_id":          asset.AssetID,
+					"asset_ready":       asset.AssetReady,
+					"asset_status_code": asset.AssetStatusCode,
+					"asset_status":      asset.AssetStatus,
+					"asset_error":       asset.AssetError,
+					"stream_url":        asset.StreamURL,
+					"thumbnail":         asset.Thumbnail,
+					"created_at":        asset.CreatedAt,
+				}
+				storageCostBigInt := new(big.Int)
+				storageCostBigInt, ok := storageCostBigInt.SetString(storageDeal.StorageCost, 10)
+				if !ok {
+					data["storage_cost"] = big.NewInt(0)
+				} else {
+					data["storage_cost"] = storageCostBigInt
+				}
 
-			storageCostEstimatedBigInt := new(big.Int)
-			storageCostEstimatedBigInt, ok = storageCostEstimatedBigInt.SetString(storageDeal.StorageCostEstimated, 10)
-			if !ok {
-				data["storage_cost_estimated"] = big.NewInt(0)
-			} else {
-				data["storage_cost_estimated"] = storageCostEstimatedBigInt
-			}
+				storageCostEstimatedBigInt := new(big.Int)
+				storageCostEstimatedBigInt, ok = storageCostEstimatedBigInt.SetString(storageDeal.StorageCostEstimated, 10)
+				if !ok {
+					data["storage_cost_estimated"] = big.NewInt(0)
+				} else {
+					data["storage_cost_estimated"] = storageCostEstimatedBigInt
+				}
 
-			transcodingCostBigInt := new(big.Int)
-			transcodingCostBigInt, ok = transcodingCostBigInt.SetString(transcodingDeal.TranscodingCost, 10)
-			if !ok {
-				data["transcoding_cost"] = big.NewInt(0)
-			} else {
-				data["transcoding_cost"] = transcodingCostBigInt
-			}
+				transcodingCostBigInt := new(big.Int)
+				transcodingCostBigInt, ok = transcodingCostBigInt.SetString(transcodingDeal.TranscodingCost, 10)
+				if !ok {
+					data["transcoding_cost"] = big.NewInt(0)
+				} else {
+					data["transcoding_cost"] = transcodingCostBigInt
+				}
 
-			transcodingCostEstimatedBigInt := new(big.Int)
-			transcodingCostEstimatedBigInt, ok = transcodingCostEstimatedBigInt.SetString(transcodingDeal.TranscodingCostEstimated, 10)
-			if !ok {
-				data["transcoding_cost_estimated"] = big.NewInt(0)
-			} else {
-				data["transcoding_cost_estimated"] = transcodingCostEstimatedBigInt
-			}
+				transcodingCostEstimatedBigInt := new(big.Int)
+				transcodingCostEstimatedBigInt, ok = transcodingCostEstimatedBigInt.SetString(transcodingDeal.TranscodingCostEstimated, 10)
+				if !ok {
+					data["transcoding_cost_estimated"] = big.NewInt(0)
+				} else {
+					data["transcoding_cost_estimated"] = transcodingCostEstimatedBigInt
+				}
 
-			util.WriteResponse(data, w)
+				util.WriteResponse(data, w)
+			}
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 			data := map[string]interface{}{

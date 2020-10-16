@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
+	"github.com/buidl-labs/Demux/internal"
 	"github.com/buidl-labs/Demux/model"
 
 	"github.com/ipfs/go-cid"
@@ -43,8 +44,11 @@ func RunPoller() {
 			log.Info("shutting down archive tracker daemon")
 			return
 		case <-time.After(pollInterval):
-			deals := dataservice.GetPendingDeals()
-			log.Infof("#pending storage deals: %d\n", len(deals))
+			deals, err := dataservice.GetPendingDeals()
+			if err != nil {
+				return
+			}
+			log.Infof("Number of pending storage deals: %d\n", len(deals))
 			for _, deal := range deals {
 				cidcorrtype, _ := cid.Decode(deal.CID)
 				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JobID), cidcorrtype, deal)
@@ -138,7 +142,7 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 			log.Info("Duration", prop.Duration)
 			log.Info("EpochPrice", prop.EpochPrice)
 
-			dataservice.UpdateStorageDeal(c.String(), 1, "stored in filecoin", prop.Miner, priceAttoFILBigInt.String(), 0)
+			dataservice.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
 		}
 	}
 

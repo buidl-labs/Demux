@@ -22,6 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/buidl-labs/Demux/dataservice"
+	"github.com/buidl-labs/Demux/internal"
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
 	"github.com/gorilla/mux"
@@ -61,7 +62,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, "Chunk already exist", http.StatusCreated)
 		}
-	} else {
+	} else if r.Method == "POST" {
 		uploaded := false
 
 		var videoFileSize int64
@@ -70,14 +71,14 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 		assetID := vars["asset_id"]
 		if !dataservice.IfAssetExists(assetID) {
 			// Set AssetError to true
-			dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error("asset not found")
 			return
 		}
 
 		if _, err := os.Stat("./assets/" + assetID); os.IsNotExist(err) {
 			// Set AssetError to true
-			dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error("asset doesn't exist:", err)
 			return
 		}
@@ -87,7 +88,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 		r.ParseMultipartForm(15 << 21)
 		file, _, err := r.FormFile("file")
 		if err != nil {
-			dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error(err)
 			return
 		}
@@ -107,7 +108,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		f, err := os.OpenFile(relativeChunk, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
-			dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error(err)
 			return
 		}
@@ -124,7 +125,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			videoFileSizeInt, _ := strconv.Atoi(resumableTotalSize[0])
 
 			if videoFileSizeInt > maxFileSize {
-				dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+				dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 				log.Warn("Maximum file size is 30 MiB")
 				return
 			}
@@ -138,7 +139,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			// Generate an empty file
 			f, err := os.Create("./assets/" + assetID + "/testfile.mp4")
 			if err != nil {
-				dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+				dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 				log.Error("couldn't create file from chunks", err)
 				return
 			}
@@ -157,7 +158,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				size, err := f.WriteAt(dat, writeOffset)
 				if err != nil {
 					// Set AssetError true
-					dataservice.UpdateAssetStatus(assetID, 0, "asset created", true)
+					dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 					log.Error("couldn't create file from chunks", err)
 					return
 				}
@@ -166,6 +167,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 			uploaded = true
 			dataservice.UpdateUploadStatus(assetID, true)
+			dataservice.UpdateAssetStatus(assetID, 0, internal.AssetStatusMap[0], true)
 
 			// Delete the temporary chunks
 			exec.Command("rm", "-rf", tempFolder+"/"+resumableIdentifier[0]).Output()
@@ -182,13 +184,13 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 				livepeerAPIKey, livepeerAPIKeyExists := os.LookupEnv("LIVEPEER_COM_API_KEY")
 				if !livepeerAPIKeyExists {
-					dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					log.Error("please provide the environment variable `LIVEPEER_COM_API_KEY`")
 					return
 				}
 
 				// Set AssetStatus to 1 (processing in livepeer)
-				dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", false)
+				dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], false)
 
 				// Start transcoding
 
@@ -225,13 +227,13 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				case <-timeout:
 					lpCmd.Process.Kill()
 					// Set AssetError to true
-					dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					log.Error("livepeer pull timed out")
 					return
 				case err := <-done:
 					if err != nil {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+						dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 						log.Error("livepeer transcoding unsuccessful")
 						return
 					}
@@ -242,14 +244,14 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				// End process if livepeer pull fails or times out
 				if livepeerPullCompleted == false {
 					// Set AssetError to true
-					dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					log.Error("livepeer transcoding unsuccessful")
 					return
 				}
 
 				items, err := ioutil.ReadDir("./assets/" + assetID)
 				if err != nil {
-					dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					log.Error(err)
 					return
 				}
@@ -265,7 +267,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 							go func(res string) {
 								segments, err := ioutil.ReadDir("./assets/" + assetID + "/" + f.Name() + "/" + res)
 								if err != nil {
-									dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+									dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 									log.Error(err)
 									return
 								}
@@ -278,13 +280,13 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 									stdout, err := exec.Command("ffprobe", "-i", "./assets/"+assetID+"/"+f.Name()+"/"+res+"/"+segName, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0").Output()
 									if err != nil {
-										dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+										dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 										log.Error(err)
 										return
 									}
 									duration, err := strconv.ParseFloat(string(stdout)[:len(string(stdout))-2], 64)
 									if err != nil {
-										dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+										dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 										log.Error(err)
 										return
 									}
@@ -308,7 +310,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 								bWriter := bufio.NewWriter(m3u8strFile)
 								n, err := bWriter.WriteString(m3u8str.String())
 								if err != nil {
-									dataservice.UpdateAssetStatus(assetID, 1, "processing in livepeer", true)
+									dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 									log.Error(err)
 									return
 								}
@@ -338,7 +340,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				})
 
 				// Set AssetStatus to 2 (attempting to pin to ipfs)
-				dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", false)
+				dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], false)
 
 				if livepeerPullCompleted {
 					// generate thumbnail
@@ -348,7 +350,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					_, err := rmcmd.Output()
 					if err != nil {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+						dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 						log.Error(err)
 						return
 					}
@@ -357,7 +359,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					matches, err := filepath.Glob(pattern)
 					if err != nil {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+						dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 						log.Error(err)
 						return
 					}
@@ -367,7 +369,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						_, err := rmcmd.Output()
 						if err != nil {
 							// Set AssetError to true
-							dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+							dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 							log.Error(err)
 							return
 						}
@@ -377,7 +379,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					matches, err = filepath.Glob(pattern)
 					if err != nil {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+						dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 						log.Error(err)
 						return
 					}
@@ -386,7 +388,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						stdout, err := renameCmd.Output()
 						if err != nil {
 							// Set AssetError to true
-							dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+							dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 							log.Error(err)
 							return
 						}
@@ -396,7 +398,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				dirsize, err := util.DirSize("./assets/" + assetID)
 				if err != nil {
 					// Set AssetError to true
-					dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+					dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 					log.Error("finding dirsize:", err)
 					return
 				}
@@ -404,13 +406,19 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				videoFileSize = videoFileSize / (1024 * 1024)
 				ratio := float64(dirsize) / float64(videoFileSize)
 				ratio = math.Round(ratio*100) / 100
-				dataservice.AddSizeRatio(model.SizeRatio{
+				dataservice.InsertSizeRatio(model.SizeRatio{
 					AssetID:          assetID,
 					SizeRatio:        ratio,
 					VideoFileSize:    uint64(videoFileSize),
 					StreamFolderSize: dirsize,
 				})
-				msr := dataservice.GetMeanSizeRatio()
+				msr, err := dataservice.GetMeanSizeRatio()
+				if err != nil {
+					// Set AssetError to true
+					dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
+					log.Error("getting msr:", err)
+					return
+				}
 				currRatioSum := math.Round(msr.RatioSum*100) / 100
 				currCount := msr.Count
 				dataservice.UpdateMeanSizeRatio(math.Round(((ratio+currRatioSum)/float64(currCount+1))*100)/100, ratio+currRatioSum, currCount+1)
@@ -487,7 +495,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						dataservice.InsertStorageDeal(model.StorageDeal{
 							AssetID:              assetID,
 							StorageStatusCode:    0,
-							StorageStatus:        "pinned to ipfs, attempting to store in filecoin",
+							StorageStatus:        internal.AssetStatusMap[3],
 							CID:                  currCIDStr,
 							Miner:                "",
 							StorageCost:          big.NewInt(0).String(),
@@ -504,10 +512,10 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
 
 						// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
-						dataservice.UpdateAssetStatus(assetID, 3, "pinned to ipfs, attempting to store in filecoin", false)
+						dataservice.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
 					} else {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 2, "attempting to pin to ipfs", true)
+						dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 						log.Error(err)
 					}
 					return
@@ -521,7 +529,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				dataservice.InsertStorageDeal(model.StorageDeal{
 					AssetID:              assetID,
 					StorageStatusCode:    0,
-					StorageStatus:        "pinned to ipfs, attempting to store in filecoin",
+					StorageStatus:        internal.AssetStatusMap[3],
 					CID:                  currCIDStr,
 					Miner:                "",
 					StorageCost:          big.NewInt(0).String(),
@@ -538,7 +546,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
 
 				// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
-				dataservice.UpdateAssetStatus(assetID, 3, "pinned to ipfs, attempting to store in filecoin", false)
+				dataservice.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
 
 				// Set AssetReady to true
 				dataservice.UpdateAssetReady(assetID, true)
@@ -559,11 +567,22 @@ func UploadStatusHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		vars := mux.Vars(r)
 		if dataservice.IfUploadExists(vars["asset_id"]) {
-			upload := dataservice.GetUpload(vars["asset_id"])
+			upload, err := dataservice.GetUpload(vars["asset_id"])
+			if err != nil {
+				w.WriteHeader(http.StatusNotFound)
+				data := map[string]interface{}{
+					"asset_id": vars["asset_id"],
+					"status":   false,
+					"error":    false,
+					"url":      "",
+				}
+				util.WriteResponse(data, w)
+			}
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
 				"asset_id": upload.AssetID,
 				"status":   upload.Status,
+				"error":    upload.Error,
 				"url":      upload.URL,
 			}
 			util.WriteResponse(data, w)
@@ -572,6 +591,7 @@ func UploadStatusHandler(w http.ResponseWriter, r *http.Request) {
 			data := map[string]interface{}{
 				"asset_id": vars["asset_id"],
 				"status":   false,
+				"error":    false,
 				"url":      "",
 			}
 			util.WriteResponse(data, w)
