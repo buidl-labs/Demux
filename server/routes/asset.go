@@ -57,7 +57,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 					AssetStatus:     "asset created",
 					AssetError:      false,
 					CreatedAt:       time.Now().Unix(),
-					Thumbnail:       "https://user-images.githubusercontent.com/24296199/94940994-e923d080-04f1-11eb-8c3d-5aad1f31e91f.png",
+					Thumbnail:       "",
 				})
 
 				// Create a new upload.
