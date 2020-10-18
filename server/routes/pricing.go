@@ -1,17 +1,14 @@
 package routes
 
 import (
-	"context"
 	"encoding/json"
 	"math/big"
 	"net/http"
-	"strconv"
 
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/util"
 
 	log "github.com/sirupsen/logrus"
-	powc "github.com/textileio/powergate/api/client"
 )
 
 // VideoData contains some data which is used to predict the streaming cost.
@@ -75,19 +72,20 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		storageDurationInt := d.StorageDuration
 		videoFileSize := uint64(d.VideoFileSize)
 
-		transcodingCostWEI, err := util.CalculateTranscodingCost("", float64(videoDurationInt))
+		transcodingCostWEI := big.NewInt(0)
+		transcodingCostWEI, err = util.CalculateTranscodingCost("", float64(videoDurationInt))
 		if err != nil {
-			log.Warn("Couldn't calculate transcoding cost:", err)
-			transcodingCostWEI = big.NewInt(0)
+			log.Warn("Couldn't calculate transcoding cost: ", err)
+			// Couldn't calculate transcoding cost. Let it be 0.
 		}
 
 		// Calculate powergate (filecoin) storage price
 
-		estimatedPrice := big.NewInt(0)
+		storageCostEstimated := big.NewInt(0)
 
 		duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 		epochs := float64(duration / float64(30))
-		folderSize, err := getFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
+		folderSize, err := GetFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
 		if err != nil {
 			w.WriteHeader(http.StatusExpectationFailed)
 			data := map[string]interface{}{
@@ -100,44 +98,11 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 		log.Info("folderSize", folderSize, "videoFileSize", videoFileSize)
 		log.Info("duration", duration, "epochs", epochs)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		pgClient, _ := powc.NewClient(util.InitialPowergateSetup.PowergateAddr)
-		defer func() {
-			if err := pgClient.Close(); err != nil {
-				log.Errorf("closing powergate client: %s", err)
-			}
-		}()
-
-		index, err := pgClient.Asks.Get(ctx)
+		// Calculate storage cost of the video
+		storageCostEstimated, err = util.CalculateStorageCost(uint64(folderSize), int64(duration))
 		if err != nil {
-			log.Warn("getting asks:", err)
-		}
-		if len(index.Storage) > 0 {
-			data := make([][]string, len(index.Storage))
-			i := 0
-			pricesSum := big.NewInt(0)
-			for _, ask := range index.Storage {
-				currPrice := big.NewInt(int64(ask.Price))
-				pricesSum.Add(pricesSum, currPrice)
-				data[i] = []string{
-					ask.Miner,
-					strconv.Itoa(int(ask.Price)),
-					strconv.Itoa(int(ask.MinPieceSize)),
-					strconv.FormatInt(ask.Timestamp, 10),
-					strconv.FormatInt(ask.Expiry, 10),
-				}
-				i++
-			}
-			lenIdx := big.NewInt(int64(len(index.Storage)))
-			meanEpochPrice := new(big.Int).Div(pricesSum, lenIdx)
-			epochsBigInt := big.NewInt(int64(epochs))
-			folderSizeBigInt := big.NewInt(int64(folderSize))
-			bigInt1024 := big.NewInt(1024)
-			estimatedPrice.Mul(meanEpochPrice, epochsBigInt)
-			estimatedPrice.Mul(estimatedPrice, folderSizeBigInt)
-			estimatedPrice = new(big.Int).Div(estimatedPrice, bigInt1024)
-			log.Info("estimatedPrice", estimatedPrice, ", meanEpochPrice", meanEpochPrice, ", pricesSum", pricesSum)
+			log.Warn("Couldn't calculate storage cost: ", err)
+			// Couldn't calculate storage cost. Let it be 0.
 		}
 
 		// TODO: Convert total price to USD and return
@@ -146,14 +111,16 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			data := map[string]interface{}{
 				"transcoding_cost_estimated": transcodingCostWEI,
-				"storage_cost_estimated":     estimatedPrice,
+				"storage_cost_estimated":     storageCostEstimated,
 			}
 			util.WriteResponse(data, w)
 		}
 	}
 }
 
-func getFolderSizeEstimate(fileSize float64) (float64, error) {
+// GetFolderSizeEstimate estimates the folderSize
+// (after transcoding) of an mp4 video using the meanSizeRatio.
+func GetFolderSizeEstimate(fileSize float64) (float64, error) {
 	msr, err := dataservice.GetMeanSizeRatio()
 
 	return fileSize * float64(msr.MeanSizeRatio), err

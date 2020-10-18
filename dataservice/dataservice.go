@@ -309,7 +309,7 @@ func UpdateStorageDeal(CID string, storageStatusCode uint32, storageStatus strin
 		"storage_cost":         storageCost,
 		"filecoin_deal_expiry": filecoinDealExpiry,
 	}}
-	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
+	result, err := storageDealCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
 		log.Error("Updating storageDeal: ", err)
 		return err
@@ -392,5 +392,30 @@ func UpdateMeanSizeRatio(ratio float64, ratioSum float64, count uint64) error {
 		return err
 	}
 	log.Info("Updating meanSizeRatio: ", result.ModifiedCount)
+	return nil
+}
+
+// UpdateAssetStatusByCID updates the status of an asset.
+func UpdateAssetStatusByCID(CID string, assetStatusCode int32, assetStatus string) error {
+	storageDealResult := model.StorageDeal{}
+	storageDealFilter := bson.D{primitive.E{Key: "cid", Value: CID}}
+	err := storageDealCollection.FindOne(context.Background(), storageDealFilter).Decode(&storageDealResult)
+	if err != nil {
+		log.Warn("Getting storageDeal by CID: ", err)
+		return err
+	}
+	log.Info("Getting storageDeal by CID: ", storageDealResult.AssetID)
+
+	filter := bson.M{"_id": storageDealResult.AssetID}
+	update := bson.M{"$set": bson.M{
+		"asset_status_code": assetStatusCode,
+		"asset_status":      assetStatus,
+	}}
+	result, err := assetCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		log.Error("Updating asset status by CID: ", err)
+		return err
+	}
+	log.Info("Updated asset status by CID: ", result.ModifiedCount)
 	return nil
 }
