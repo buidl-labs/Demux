@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -38,6 +39,52 @@ var InitialPowergateSetup = PowergateSetup{
 	SampleSize:    700,
 	MaxParallel:   1,
 	TotalSamples:  1,
+}
+
+// CalculateStorageCost computes the storage cost
+// of a folder in attoFIL and returns it.
+func CalculateStorageCost(folderSize uint64, storageDuration int64) (*big.Int, error) {
+	estimatedPrice := big.NewInt(0)
+	// storageDurationInt := 31536000          // deal duration currently set to 1 year. 15768000-> 6 months
+	duration := float64(storageDuration) // duration of deal in seconds (provided by user)
+	epochs := float64(duration / float64(30))
+	log.Info("folderSize", folderSize)
+	log.Info("duration", duration, "epochs", epochs)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pgClient, _ := client.NewClient(InitialPowergateSetup.PowergateAddr)
+	defer func() {
+		if err := pgClient.Close(); err != nil {
+			log.Warn("closing powergate client:", err)
+		}
+	}()
+
+	index, err := pgClient.Asks.Get(ctx)
+	if err != nil {
+		log.Warn("getting asks:", err)
+		return estimatedPrice, err
+	}
+	if len(index.Storage) > 0 {
+		i := 0
+		pricesSum := big.NewInt(0)
+		for _, ask := range index.Storage {
+			currPrice := big.NewInt(int64(ask.Price))
+			pricesSum.Add(pricesSum, currPrice)
+			i++
+		}
+		lenIdx := big.NewInt(int64(len(index.Storage)))
+		meanEpochPrice := new(big.Int).Div(pricesSum, lenIdx)
+		epochsBigInt := big.NewInt(int64(epochs))
+		folderSizeBigInt := big.NewInt(int64(folderSize))
+		bigInt1024 := big.NewInt(1024)
+		estimatedPrice.Mul(meanEpochPrice, epochsBigInt)
+		estimatedPrice.Mul(estimatedPrice, folderSizeBigInt)
+		estimatedPrice = new(big.Int).Div(estimatedPrice, bigInt1024)
+		log.Info("estimatedPrice", estimatedPrice, ", meanEpochPrice", meanEpochPrice, ", pricesSum", pricesSum)
+		return estimatedPrice, nil
+	}
+	return estimatedPrice, fmt.Errorf("no miners in asks index")
 }
 
 // RunPow runs the powergate client

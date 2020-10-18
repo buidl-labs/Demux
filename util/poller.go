@@ -143,6 +143,7 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 			log.Info("EpochPrice", prop.EpochPrice)
 
 			dataservice.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
+			dataservice.UpdateAssetStatusByCID(c.String(), 4, internal.AssetStatusMap[4])
 		}
 	}
 
