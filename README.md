@@ -125,12 +125,13 @@ This endpoint lets us see the status of an upload.
   ```json
   {
     "asset_id": "34d048bb-1076-4937-8b91-6bcda7a6187c",
+    "error": false,
     "status": true,
     "url": "http://localhost:8000/fileupload/34d048bb-1076-4937-8b91-6bcda7a6187c"
   }
   ```
 
-  In the response, `status` is initially `false`, and it becomes `true` when the file has been uploaded successfully to Demux (using `/POST /fileupload/<asset_id>`). A frontend client may poll for the upload status to change to `true` before proceeding to the next step in the workflow.
+  In the response, `status` is initially `false`, and it becomes `true` when the file has been uploaded successfully to Demux (using `/POST /fileupload/<asset_id>`). `error` is `false` by default, and becomes `true` if there is some problem in uploading the file. A frontend client may poll for the upload status to change to `true` before proceeding to the next step in the workflow.
 
 <br>
 
