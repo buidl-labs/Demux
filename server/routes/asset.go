@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
+	"github.com/buidl-labs/Demux/internal"
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
 	"github.com/google/uuid"
@@ -54,7 +55,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 					AssetID:         id.String(),
 					AssetReady:      false,
 					AssetStatusCode: 0,
-					AssetStatus:     "asset created",
+					AssetStatus:     internal.AssetStatusMap[0],
 					AssetError:      false,
 					CreatedAt:       time.Now().Unix(),
 					Thumbnail:       "",
