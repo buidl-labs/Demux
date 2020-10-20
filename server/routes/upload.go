@@ -84,7 +84,6 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		tempFolder := "./assets/" + assetID
 
-		r.ParseMultipartForm(15 << 21)
 		file, _, err := r.FormFile("file")
 		if err != nil {
 			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
