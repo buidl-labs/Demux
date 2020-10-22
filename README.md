@@ -32,7 +32,7 @@ Currently hosted at https://demux.onrender.com/. For authentication credentials,
 - [`POST /fileupload/<asset_id>`](#post-fileuploadasset_id)
 - [`GET /upload/<asset_id>`](#get-uploadasset_id)
 - [`GET /asset/<asset_id>`](#get-assetasset_id)
-- [`POST /pricing`](#post-pricing)
+- [`POST /pricing`](#post-pricing) [WIP]
 
 ## <br>
 
@@ -176,7 +176,7 @@ This endpoint gives us the status of an asset (uploaded video) in the pipeline.
   | asset_id                   | `string`  | Used to identify an uploaded video.                                                                                                                                                                                                                                                                   |
   | asset_ready                | `boolean` | Initially its value is false, it will become true once the video is ready for streaming.                                                                                                                                                                                                              |
   | asset_status               | `string`  | Can have five possible values, corresponding to `asset_status_code` <br> • -1: "asset created"<br> • 0: "video uploaded successfully"<br> • 1: "processing in livepeer"<br> • 2: "attempting to pin to ipfs"<br> • 3: "pinned to ipfs, attempting to store in filecoin"<br> • 4: "stored in filecoin" |
-  | asset_status_code          | `int`     | Possible values: 0, 1, 2, 3, 4                                                                                                                                                                                                                                                                        |
+  | asset_status_code          | `int`     | Possible values: -1, 0, 1, 2, 3, 4                                                                                                                                                                                                                                                                        |
   | created_at                 | `int`     | Unix timestamp of asset creation.                                                                                                                                                                                                                                                                     |
   | storage_cost               | `int`     | Actual storage cost in filecoin network (value in attoFIL).                                                                                                                                                                                                                                           |
   | storage_cost_estimated     | `int`     | Estimated storage cost in filecoin network (value in attoFIL).                                                                                                                                                                                                                                        |
@@ -187,7 +187,7 @@ This endpoint gives us the status of an asset (uploaded video) in the pipeline.
 
 <br>
 
-### `POST /pricing`
+### `POST /pricing` [WIP]
 
 This is used to estimate the transcoding and storage cost for a given video.
 
