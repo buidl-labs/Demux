@@ -165,7 +165,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 			uploaded = true
 			dataservice.UpdateUploadStatus(assetID, true)
-			dataservice.UpdateAssetStatus(assetID, 0, internal.AssetStatusMap[0], true)
+			dataservice.UpdateAssetStatus(assetID, 0, internal.AssetStatusMap[0], false)
 
 			// Delete the temporary chunks
 			exec.Command("rm", "-rf", tempFolder+"/"+resumableIdentifier[0]).Output()
@@ -526,17 +526,24 @@ func UpdateSizeRatio(assetID string, videoFileSize int64, dirsize uint64) (uint6
 	videoFileSize = videoFileSize / (1024 * 1024)
 	ratio := float64(dirsize) / float64(videoFileSize)
 	ratio = math.Round(ratio*100) / 100
+
+	msr, err := dataservice.GetMeanSizeRatio()
+	if err != nil {
+		log.Error("getting msr:", err)
+		return dirsize, ratio, msr.MeanSizeRatio, msr.MeanSizeRatio, err
+	}
+
+	if uint64(videoFileSize) == 0 || ratio == 0 || dirsize == 0 || ratio == math.Inf(1) {
+		log.Errorf("unexpected value. videoFileSize: %d, dirsize: %d\n", videoFileSize, dirsize)
+		return dirsize, ratio, msr.MeanSizeRatio, msr.MeanSizeRatio, fmt.Errorf("unexpected size")
+	}
 	dataservice.InsertSizeRatio(model.SizeRatio{
 		AssetID:          assetID,
 		SizeRatio:        ratio,
 		VideoFileSize:    uint64(videoFileSize),
 		StreamFolderSize: dirsize,
 	})
-	msr, err := dataservice.GetMeanSizeRatio()
-	if err != nil {
-		log.Error("getting msr:", err)
-		return dirsize, ratio, msr.MeanSizeRatio, msr.MeanSizeRatio, err
-	}
+
 	currRatioSum := math.Round(msr.RatioSum*100) / 100
 	currCount := msr.Count
 	updatedMsr := math.Round(((ratio+currRatioSum)/float64(currCount+1))*100) / 100
