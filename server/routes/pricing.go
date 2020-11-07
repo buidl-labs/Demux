@@ -19,7 +19,7 @@ type VideoData struct {
 }
 
 // PriceEstimateHandler handles the /pricing endpoint
-func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
+func PriceEstimateHandler(w http.ResponseWriter, r *http.Request, msr dataservice.MeanSizeRatioDatabase) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
@@ -85,7 +85,7 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 		duration := float64(storageDurationInt) // duration of deal in seconds (provided by user)
 		epochs := float64(duration / float64(30))
-		folderSize, err := GetFolderSizeEstimate(float64(videoFileSize)) // size of folder in MiB (to be predicted by estimation algorithm)
+		folderSize, err := GetFolderSizeEstimate(float64(videoFileSize), msr) // size of folder in MiB (to be predicted by estimation algorithm)
 		if err != nil {
 			w.WriteHeader(http.StatusExpectationFailed)
 			data := map[string]interface{}{
@@ -120,8 +120,8 @@ func PriceEstimateHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetFolderSizeEstimate estimates the folderSize
 // (after transcoding) of an mp4 video using the meanSizeRatio.
-func GetFolderSizeEstimate(fileSize float64) (float64, error) {
-	msr, err := dataservice.GetMeanSizeRatio()
+func GetFolderSizeEstimate(fileSize float64, msr dataservice.MeanSizeRatioDatabase) (float64, error) {
+	msrObj, err := msr.GetMeanSizeRatio()
 
-	return fileSize * float64(msr.MeanSizeRatio), err
+	return fileSize * float64(msrObj.MeanSizeRatio), err
 }

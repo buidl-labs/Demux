@@ -22,7 +22,10 @@ import (
 
 // RunPoller runs a poller in the background which
 // updates the state of storage deal jobs.
-func RunPoller() {
+func RunPoller(db dataservice.DatabaseHelper) {
+	assetDB := dataservice.NewAssetDatabase(db)
+	storageDealDB := dataservice.NewStorageDealDatabase(db)
+
 	i, err := strconv.Atoi(os.Getenv("POLL_INTERVAL"))
 	if err != nil {
 		log.Error("Please set env variable `POLL_INTERVAL`")
@@ -44,21 +47,21 @@ func RunPoller() {
 			log.Info("shutting down archive tracker daemon")
 			return
 		case <-time.After(pollInterval):
-			deals, err := dataservice.GetPendingDeals()
+			deals, err := storageDealDB.GetPendingDeals()
 			if err != nil {
 				return
 			}
 			log.Infof("Number of pending storage deals: %d\n", len(deals))
 			for _, deal := range deals {
 				cidcorrtype, _ := cid.Decode(deal.CID)
-				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JobID), cidcorrtype, deal)
+				b, s, err := pollStorageDealProgress(ctx, pgClient, ffs.JobID(deal.JobID), cidcorrtype, deal, storageDealDB, assetDB)
 				log.Info("dealJobID", deal.JobID, "pollprog", b, s, err)
 			}
 		}
 	}
 }
 
-func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs.JobID, mycid cid.Cid, storageDeal model.StorageDeal) (bool, string, error) {
+func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs.JobID, mycid cid.Cid, storageDeal model.StorageDeal, storageDealDB dataservice.StorageDealDatabase, assetDB dataservice.AssetDatabase) (bool, string, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ctx = context.WithValue(ctx, powc.AuthKey, storageDeal.FFSToken)
@@ -99,13 +102,13 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 	// On success, save Deal data in the underlying Bucket thread. On failure,
 	// save the error message. Also update status on Mongo for the archive.
 	if job.Status == ffs.Success {
-		err := saveDealsInDB(ctx, pgClient, storageDeal.FFSToken, mycid)
+		err := saveDealsInDB(ctx, pgClient, storageDeal.FFSToken, mycid, storageDealDB, assetDB)
 		if err != nil {
 			return true, fmt.Sprintf("saving deal data in archive: %s", err), nil
 		}
 	} else {
 		log.Info("job.Status", ffs.JobStatusStr[job.Status], job.Status)
-		dataservice.UpdateStorageDeal(mycid.String(), 2, "failed to create filecoin storage deal", "", "", 0)
+		storageDealDB.UpdateStorageDeal(mycid.String(), 2, "failed to create filecoin storage deal", "", "", 0)
 	}
 
 	msg := "reached final status"
@@ -116,7 +119,7 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 	return false, msg, nil
 }
 
-func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, c cid.Cid) error {
+func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, c cid.Cid, storageDealDB dataservice.StorageDealDatabase, assetDB dataservice.AssetDatabase) error {
 	ctxFFS := context.WithValue(ctx, powc.AuthKey, ffsToken)
 	sh, err := pgClient.FFS.Show(ctxFFS, c)
 	if err != nil {
@@ -142,8 +145,12 @@ func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, 
 			log.Info("Duration", prop.Duration)
 			log.Info("EpochPrice", prop.EpochPrice)
 
-			dataservice.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
-			dataservice.UpdateAssetStatusByCID(c.String(), 4, internal.AssetStatusMap[4])
+			storageDealDB.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
+			sDeal, err := storageDealDB.GetStorageDealByCID(c.String())
+			if err == nil {
+				assetID := sDeal.AssetID
+				assetDB.UpdateAssetStatus(assetID, 4, internal.AssetStatusMap[4], false)
+			}
 		}
 	}
 

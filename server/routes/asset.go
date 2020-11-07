@@ -18,7 +18,7 @@ import (
 )
 
 // AssetHandler enables checking the status of an asset in its demux lifecycle.
-func AssetHandler(w http.ResponseWriter, r *http.Request) {
+func AssetHandler(w http.ResponseWriter, r *http.Request, u dataservice.UserDatabase, a dataservice.AssetDatabase, up dataservice.UploadDatabase) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 
@@ -30,7 +30,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 			sha256Digest := sha256.Sum256([]byte(tokenID + ":" + tokenSecret))
 			sha256DigestStr := hex.EncodeToString(sha256Digest[:])
 
-			if dataservice.IfUserExists(sha256DigestStr) {
+			if u.IfUserExists(sha256DigestStr) {
 				log.Info("User auth successful")
 				// Generate a new assetID.
 				id := uuid.New()
@@ -50,7 +50,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				_ = stdout
 
 				// Create a new asset.
-				dataservice.InsertAsset(model.Asset{
+				a.InsertAsset(model.Asset{
 					AssetID:         id.String(),
 					AssetReady:      false,
 					AssetStatusCode: 0,
@@ -61,14 +61,14 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 				})
 
 				// Create a new upload.
-				dataservice.InsertUpload(model.Upload{
+				up.InsertUpload(model.Upload{
 					AssetID: id.String(),
 					URL:     os.Getenv("DEMUX_URL") + "fileupload/" + id.String(),
 					Status:  false,
 					Error:   false,
 				})
 
-				dataservice.IncrementUserAssetCount(sha256DigestStr)
+				u.IncrementUserAssetCount(sha256DigestStr)
 
 				w.WriteHeader(http.StatusOK)
 				data := map[string]interface{}{
@@ -96,7 +96,7 @@ func AssetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // AssetStatusHandler returns the asset details and status.
-func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
+func AssetStatusHandler(w http.ResponseWriter, r *http.Request, a dataservice.AssetDatabase, t dataservice.TranscodingDealDatabase, sd dataservice.StorageDealDatabase) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -104,10 +104,10 @@ func AssetStatusHandler(w http.ResponseWriter, r *http.Request) {
 		// Collect path parameters
 		vars := mux.Vars(r)
 
-		if dataservice.IfAssetExists(vars["asset_id"]) {
-			asset, err := dataservice.GetAsset(vars["asset_id"])
-			transcodingDeal, _ := dataservice.GetTranscodingDeal(vars["asset_id"])
-			storageDeal, _ := dataservice.GetStorageDeal(vars["asset_id"])
+		if a.IfAssetExists(vars["asset_id"]) {
+			asset, err := a.GetAsset(vars["asset_id"])
+			transcodingDeal, _ := t.GetTranscodingDeal(vars["asset_id"])
+			storageDeal, _ := sd.GetStorageDeal(vars["asset_id"])
 
 			if err != nil {
 				w.WriteHeader(http.StatusNotFound)

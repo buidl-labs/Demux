@@ -32,7 +32,7 @@ import (
 var maxFileSize = 30 * 1024 * 1024
 
 // FileUploadHandler handles the asset uploads using resumable.js
-func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
+func FileUploadHandler(w http.ResponseWriter, r *http.Request, a dataservice.AssetDatabase, up dataservice.UploadDatabase, t dataservice.TranscodingDealDatabase, sd dataservice.StorageDealDatabase, sr dataservice.SizeRatioDatabase, msr dataservice.MeanSizeRatioDatabase) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "*")
@@ -68,16 +68,16 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		vars := mux.Vars(r)
 		assetID := vars["asset_id"]
-		if !dataservice.IfAssetExists(assetID) {
+		if !a.IfAssetExists(assetID) {
 			// Set AssetError to true
-			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+			a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error("asset not found")
 			return
 		}
 
 		if _, err := os.Stat("./assets/" + assetID); os.IsNotExist(err) {
 			// Set AssetError to true
-			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+			a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error("asset doesn't exist:", err)
 			return
 		}
@@ -86,7 +86,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		file, _, err := r.FormFile("file")
 		if err != nil {
-			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+			a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error(err)
 			return
 		}
@@ -106,7 +106,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		f, err := os.OpenFile(relativeChunk, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
-			dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+			a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 			log.Error(err)
 			return
 		}
@@ -123,7 +123,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			videoFileSizeInt, _ := strconv.Atoi(resumableTotalSize[0])
 
 			if videoFileSizeInt > maxFileSize {
-				dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+				a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 				log.Warn("Maximum file size is 30 MiB")
 				return
 			}
@@ -137,7 +137,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			// Generate an empty file
 			f, err := os.Create("./assets/" + assetID + "/testfile.mp4")
 			if err != nil {
-				dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+				a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 				log.Error("couldn't create file from chunks", err)
 				return
 			}
@@ -156,7 +156,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				size, err := f.WriteAt(dat, writeOffset)
 				if err != nil {
 					// Set AssetError true
-					dataservice.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
+					a.UpdateAssetStatus(assetID, -1, internal.AssetStatusMap[-1], true)
 					log.Error("couldn't create file from chunks", err)
 					return
 				}
@@ -164,8 +164,8 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			uploaded = true
-			dataservice.UpdateUploadStatus(assetID, true)
-			dataservice.UpdateAssetStatus(assetID, 0, internal.AssetStatusMap[0], false)
+			up.UpdateUploadStatus(assetID, true)
+			a.UpdateAssetStatus(assetID, 0, internal.AssetStatusMap[0], false)
 
 			// Delete the temporary chunks
 			exec.Command("rm", "-rf", tempFolder+"/"+resumableIdentifier[0]).Output()
@@ -179,12 +179,12 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 			go func() {
 
 				// Set AssetStatus to 1 (processing in livepeer)
-				dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], false)
+				a.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], false)
 
 				if err := Transcode(assetID, demuxFileName, videoFileSize); err != nil {
 					log.Error(err)
 					// Set AssetError to true
-					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
+					a.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					return
 				}
 
@@ -199,18 +199,18 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				if err := CreateStream(assetID, demuxFileName); err != nil {
 					log.Error(err)
 					// Set AssetError to true
-					dataservice.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
+					a.UpdateAssetStatus(assetID, 1, internal.AssetStatusMap[1], true)
 					return
 				}
 
-				dataservice.InsertTranscodingDeal(model.TranscodingDeal{
+				t.InsertTranscodingDeal(model.TranscodingDeal{
 					AssetID:                  assetID,
 					TranscodingCost:          big.NewInt(0).String(),
 					TranscodingCostEstimated: transcodingCostEstimated.String(),
 				})
 
 				// Set AssetStatus to 2 (attempting to pin to ipfs)
-				dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], false)
+				a.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], false)
 
 				// Set storageCostEstimated to 0.
 				storageCostEstimated := big.NewInt(0)
@@ -221,7 +221,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 					log.Warn("finding dirsize: ", err)
 				} else {
 					// Update sizeRatio
-					_, _, _, _, err = UpdateSizeRatio(assetID, videoFileSize, dirsize)
+					_, _, _, _, err = UpdateSizeRatio(assetID, videoFileSize, dirsize, sr, msr)
 					if err != nil {
 						log.Warn("Couldn't process folder")
 					}
@@ -252,7 +252,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 						log.Infof("CID: %s, currFolderName: %s\n", currCIDStr, currFolderName)
 
-						dataservice.InsertStorageDeal(model.StorageDeal{
+						sd.InsertStorageDeal(model.StorageDeal{
 							AssetID:              assetID,
 							StorageStatusCode:    0,
 							StorageStatus:        internal.AssetStatusMap[3],
@@ -266,16 +266,16 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 						})
 
 						// Update streamURL of the asset
-						dataservice.UpdateStreamURL(assetID, streamURL)
+						a.UpdateStreamURL(assetID, streamURL)
 
 						// Update thumbnail of the asset
-						dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
+						a.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
 
 						// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
-						dataservice.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
+						a.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
 					} else {
 						// Set AssetError to true
-						dataservice.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
+						a.UpdateAssetStatus(assetID, 2, internal.AssetStatusMap[2], true)
 						log.Error(err)
 					}
 					return
@@ -286,7 +286,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 				log.Infof("CID: %s, currFolderName: %s\n", currCIDStr, currFolderName)
 
-				dataservice.InsertStorageDeal(model.StorageDeal{
+				sd.InsertStorageDeal(model.StorageDeal{
 					AssetID:              assetID,
 					StorageStatusCode:    0,
 					StorageStatus:        internal.AssetStatusMap[3],
@@ -300,16 +300,16 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 				})
 
 				// Update streamURL of the asset
-				dataservice.UpdateStreamURL(assetID, streamURL)
+				a.UpdateStreamURL(assetID, streamURL)
 
 				// Update thumbnail of the asset
-				dataservice.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
+				a.UpdateThumbnail(assetID, ipfsGateway+currCIDStr+"/thumbnail.png")
 
 				// Set AssetStatus to 3 (pinned to ipfs, attempting to store in filecoin)
-				dataservice.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
+				a.UpdateAssetStatus(assetID, 3, internal.AssetStatusMap[3], false)
 
 				// Set AssetReady to true
-				dataservice.UpdateAssetReady(assetID, true)
+				a.UpdateAssetReady(assetID, true)
 			}()
 
 			w.WriteHeader(http.StatusOK)
@@ -322,7 +322,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // UploadStatusHandler returns the upload details and status.
-func UploadStatusHandler(w http.ResponseWriter, r *http.Request) {
+func UploadStatusHandler(w http.ResponseWriter, r *http.Request, up dataservice.UploadDatabase) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method == "GET" {
 		vars := mux.Vars(r)
@@ -334,8 +334,8 @@ func UploadStatusHandler(w http.ResponseWriter, r *http.Request) {
 			"url":      "",
 		}
 
-		if dataservice.IfUploadExists(vars["asset_id"]) {
-			upload, err := dataservice.GetUpload(vars["asset_id"])
+		if up.IfUploadExists(vars["asset_id"]) {
+			upload, err := up.GetUpload(vars["asset_id"])
 			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
 				util.WriteResponse(unknownStatusData, w)
@@ -521,33 +521,33 @@ func CreateStream(assetID string, demuxFileName string) error {
 
 // UpdateSizeRatio updates the sizeRatioCollection with the
 // current asset file and folder size details.
-func UpdateSizeRatio(assetID string, videoFileSize int64, dirsize uint64) (uint64, float64, float64, float64, error) {
+func UpdateSizeRatio(assetID string, videoFileSize int64, dirsize uint64, sr dataservice.SizeRatioDatabase, msr dataservice.MeanSizeRatioDatabase) (uint64, float64, float64, float64, error) {
 	dirsize = dirsize / (1024 * 1024)
 	videoFileSize = videoFileSize / (1024 * 1024)
 	ratio := float64(dirsize) / float64(videoFileSize)
 	ratio = math.Round(ratio*100) / 100
 
-	msr, err := dataservice.GetMeanSizeRatio()
+	msrObj, err := msr.GetMeanSizeRatio()
 	if err != nil {
 		log.Error("getting msr:", err)
-		return dirsize, ratio, msr.MeanSizeRatio, msr.MeanSizeRatio, err
+		return dirsize, ratio, msrObj.MeanSizeRatio, msrObj.MeanSizeRatio, err
 	}
 
 	if uint64(videoFileSize) == 0 || ratio == 0 || dirsize == 0 || ratio == math.Inf(1) {
 		log.Errorf("unexpected value. videoFileSize: %d, dirsize: %d\n", videoFileSize, dirsize)
-		return dirsize, ratio, msr.MeanSizeRatio, msr.MeanSizeRatio, fmt.Errorf("unexpected size")
+		return dirsize, ratio, msrObj.MeanSizeRatio, msrObj.MeanSizeRatio, fmt.Errorf("unexpected size")
 	}
-	dataservice.InsertSizeRatio(model.SizeRatio{
+	sr.InsertSizeRatio(model.SizeRatio{
 		AssetID:          assetID,
 		SizeRatio:        ratio,
 		VideoFileSize:    uint64(videoFileSize),
 		StreamFolderSize: dirsize,
 	})
 
-	currRatioSum := math.Round(msr.RatioSum*100) / 100
-	currCount := msr.Count
+	currRatioSum := math.Round(msrObj.RatioSum*100) / 100
+	currCount := msrObj.Count
 	updatedMsr := math.Round(((ratio+currRatioSum)/float64(currCount+1))*100) / 100
-	dataservice.UpdateMeanSizeRatio(updatedMsr, ratio+currRatioSum, currCount+1)
+	msr.UpdateMeanSizeRatio(updatedMsr, ratio+currRatioSum, currCount+1)
 
-	return dirsize, ratio, msr.MeanSizeRatio, updatedMsr, nil
+	return dirsize, ratio, msrObj.MeanSizeRatio, updatedMsr, nil
 }

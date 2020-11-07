@@ -26,4 +26,3 @@ livepeer_cli
 main
 .env
 user
-user.go
