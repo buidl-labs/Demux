@@ -19,3 +19,5 @@ jobs:
         run: go mod download
       - name: Build
         run: go build ./cmd/main.go
+      - name: Test
+        run: go test -v ./dataservice
