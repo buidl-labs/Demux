@@ -8,13 +8,7 @@ import (
 	"github.com/buidl-labs/Demux/model"
 
 	"github.com/stretchr/testify/assert"
-	// mock "github.com/stretchr/testify/mock"
-	// "go.mongodb.org/mongo-driver/bson"
-	// "go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-// var dbName = "demux"
-// var uri = "mongodb://127.0.0.1:27017"
 
 func TestNewAssetDatabase(t *testing.T) {
 	dbClient, err := dataservice.NewClient(uri)

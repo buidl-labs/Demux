@@ -8,4 +8,14 @@ run:
 	export PORT=$(PORT)
 	export PINATA_API_KEY=$(PINATA_API_KEY)
 	export PINATA_SECRET_KEY=$(PINATA_SECRET_KEY)
+	export IPFS_GATEWAY=$(IPFS_GATEWAY)
+	export POW_TOKEN=$(POW_TOKEN)
+	export DEMUX_URL=$(DEMUX_URL)
+	export MONGO_URI=$(MONGO_URI)
 	go run cmd/main.go
+
+build:
+	go build cmd/main.go
+
+test:
+	go test -v ./dataservice
