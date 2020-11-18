@@ -10,7 +10,8 @@ require (
 	github.com/rakyll/gotest v0.0.5
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.6.1
-	github.com/textileio/powergate v0.9.1
+	github.com/textileio/powergate v1.2.1
 	go.mongodb.org/mongo-driver v1.4.2
 	golang.org/x/sys v0.0.0-20201017003518-b09fb700fbb7
+	google.golang.org/protobuf v1.25.0
 )

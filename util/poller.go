@@ -3,21 +3,22 @@ package util
 import (
 	"context"
 	"fmt"
-	"math"
-	"math/big"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/buidl-labs/Demux/dataservice"
-	"github.com/buidl-labs/Demux/internal"
+	// "github.com/buidl-labs/Demux/internal"
 	"github.com/buidl-labs/Demux/model"
 
 	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
 	powc "github.com/textileio/powergate/api/client"
+	userPb "github.com/textileio/powergate/api/gen/powergate/user/v1"
 	"github.com/textileio/powergate/ffs"
+	// "github.com/textileio/powergate/api/client/admin"
+	// "google.golang.org/protobuf/encoding/protojson"
 )
 
 // RunPoller runs a poller in the background which
@@ -62,12 +63,14 @@ func RunPoller(db dataservice.DatabaseHelper) {
 }
 
 func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs.JobID, mycid cid.Cid, storageDeal model.StorageDeal, storageDealDB dataservice.StorageDealDatabase, assetDB dataservice.AssetDatabase) (bool, string, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	ctx = context.WithValue(ctx, powc.AuthKey, storageDeal.FFSToken)
-	ch := make(chan powc.JobEvent, 1)
 
-	if err := pgClient.FFS.WatchJobs(ctx, ch, jid); err != nil {
+	chJob := make(chan powc.WatchStorageJobsEvent, 1)
+	ctxWatch, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if err := pgClient.StorageJobs.Watch(ctxWatch, chJob, jid.String()); err != nil {
+		// return fmt.Errorf("opening listening job status: %s", err)
+
 		// if error specifies that the auth token isn't found, powergate must have been reset.
 		// return the error as fatal so the archive will be untracked
 		if strings.Contains(err.Error(), "auth token not found") {
@@ -76,14 +79,16 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 		return true, fmt.Sprintf("watching current job %s for cid %s: %s", jid, mycid, err), nil
 	}
 
+	// var s powc.WatchStorageJobsEvent
+
 	var aborted bool
 	var abortMsg string
-	var job ffs.StorageJob
+	var storageJob *userPb.StorageJob
 	select {
 	case <-ctx.Done():
 		log.Infof("job %s status watching canceled\n", jid)
 		return true, "watching cancelled", nil
-	case s, ok := <-ch:
+	case s, ok := <-chJob:
 		if !ok {
 			return true, "powergate closed communication chan", nil
 		}
@@ -92,22 +97,22 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 			aborted = true
 			abortMsg = s.Err.Error()
 		}
-		job = s.Job
+		storageJob = s.Res.StorageJob
 	}
 
-	if !aborted && !isJobStatusFinal(job.Status) {
+	if !aborted && !isJobStatusFinal(storageJob) {
 		return true, "no final status yet", nil
 	}
 
 	// On success, save Deal data in the underlying Bucket thread. On failure,
 	// save the error message. Also update status on Mongo for the archive.
-	if job.Status == ffs.Success {
+	if storageJob.Status == userPb.JobStatus_JOB_STATUS_SUCCESS {
 		err := saveDealsInDB(ctx, pgClient, storageDeal.FFSToken, mycid, storageDealDB, assetDB)
 		if err != nil {
 			return true, fmt.Sprintf("saving deal data in archive: %s", err), nil
 		}
 	} else {
-		log.Info("job.Status", ffs.JobStatusStr[job.Status], job.Status)
+		log.Info("job.Status", storageJob.Status, storageJob.Status.String())
 		storageDealDB.UpdateStorageDeal(mycid.String(), 2, "failed to create filecoin storage deal", "", "", 0)
 	}
 
@@ -120,45 +125,51 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 }
 
 func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, c cid.Cid, storageDealDB dataservice.StorageDealDatabase, assetDB dataservice.AssetDatabase) error {
-	ctxFFS := context.WithValue(ctx, powc.AuthKey, ffsToken)
-	sh, err := pgClient.FFS.Show(ctxFFS, c)
+	ctx = context.WithValue(ctx, powc.AuthKey, ffsToken)
+	res, err := pgClient.StorageJobs.Executing(ctx)
 	if err != nil {
-		return fmt.Errorf("getting cid info: %s", err)
+		return fmt.Errorf("getting executing storage jobs: %s", err)
 	}
+	// sh, err := pgClient.FFS.Show(ctxFFS, c)
+	// if err != nil {
+	// 	return fmt.Errorf("getting cid info: %s", err)
+	// }
 
-	proposals := sh.GetCidInfo().GetCold().GetFilecoin().GetProposals()
+	log.Info("sdidb res:", res)
 
-	log.Info("proposals", proposals)
+	// proposals := sh.GetCidInfo().GetCold().GetFilecoin().GetProposals()
 
-	if len(proposals) > 0 {
-		for _, prop := range proposals {
-			priceAttoFIL := prop.EpochPrice * uint64(prop.Duration)
-			priceAttoFILBigInt := new(big.Int).SetUint64(priceAttoFIL)
-			priceFIL := float64(priceAttoFIL) * math.Pow(10, -18)
-			log.Info("priceAttoFIL", priceAttoFIL, "priceAttoFILBigInt", priceAttoFILBigInt, "priceFIL", priceFIL)
+	// log.Info("proposals", proposals)
 
-			log.Info("ProposalCid", prop.ProposalCid)
-			log.Info("Renewed", prop.Renewed)
-			log.Info("Miner", prop.Miner)
-			log.Info("StartEpoch", prop.StartEpoch)
-			log.Info("ActivationEpoch", prop.ActivationEpoch)
-			log.Info("Duration", prop.Duration)
-			log.Info("EpochPrice", prop.EpochPrice)
+	// if len(proposals) > 0 {
+	// 	for _, prop := range proposals {
+	// 		priceAttoFIL := prop.EpochPrice * uint64(prop.Duration)
+	// 		priceAttoFILBigInt := new(big.Int).SetUint64(priceAttoFIL)
+	// 		priceFIL := float64(priceAttoFIL) * math.Pow(10, -18)
+	// 		log.Info("priceAttoFIL", priceAttoFIL, "priceAttoFILBigInt", priceAttoFILBigInt, "priceFIL", priceFIL)
 
-			storageDealDB.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
-			sDeal, err := storageDealDB.GetStorageDealByCID(c.String())
-			if err == nil {
-				assetID := sDeal.AssetID
-				assetDB.UpdateAssetStatus(assetID, 4, internal.AssetStatusMap[4], false)
-			}
-		}
-	}
+	// 		log.Info("ProposalCid", prop.ProposalCid)
+	// 		log.Info("Renewed", prop.Renewed)
+	// 		log.Info("Miner", prop.Miner)
+	// 		log.Info("StartEpoch", prop.StartEpoch)
+	// 		log.Info("ActivationEpoch", prop.ActivationEpoch)
+	// 		log.Info("Duration", prop.Duration)
+	// 		log.Info("EpochPrice", prop.EpochPrice)
+
+	// 		storageDealDB.UpdateStorageDeal(c.String(), 1, internal.AssetStatusMap[4], prop.Miner, priceAttoFILBigInt.String(), 0)
+	// 		sDeal, err := storageDealDB.GetStorageDealByCID(c.String())
+	// 		if err == nil {
+	// 			assetID := sDeal.AssetID
+	// 			assetDB.UpdateAssetStatus(assetID, 4, internal.AssetStatusMap[4], false)
+	// 		}
+	// 	}
+	// }
 
 	return nil
 }
 
-func isJobStatusFinal(js ffs.JobStatus) bool {
-	return js == ffs.Success ||
-		js == ffs.Canceled ||
-		js == ffs.Failed
+func isJobStatusFinal(sJ *userPb.StorageJob) bool {
+	return sJ.Status == userPb.JobStatus_JOB_STATUS_SUCCESS ||
+		sJ.Status == userPb.JobStatus_JOB_STATUS_CANCELED ||
+		sJ.Status == userPb.JobStatus_JOB_STATUS_FAILED
 }

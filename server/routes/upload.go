@@ -26,7 +26,7 @@ import (
 	"github.com/buidl-labs/Demux/model"
 	"github.com/buidl-labs/Demux/util"
 	"github.com/gorilla/mux"
-	"github.com/ipfs/go-cid"
+	// "github.com/ipfs/go-cid"
 )
 
 var maxFileSize = 30 * 1024 * 1024
@@ -235,7 +235,7 @@ func FileUploadHandler(w http.ResponseWriter, r *http.Request, a dataservice.Ass
 
 				ctx := context.Background()
 
-				var currCID cid.Cid
+				var currCID string
 				var streamURL string
 				var ipfsGateway = os.Getenv("IPFS_GATEWAY")
 				var jid string
