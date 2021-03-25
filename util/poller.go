@@ -14,10 +14,11 @@ import (
 
 	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
-	powc "github.com/textileio/powergate/api/client"
-	userPb "github.com/textileio/powergate/api/gen/powergate/user/v1"
-	"github.com/textileio/powergate/ffs"
-	// "github.com/textileio/powergate/api/client/admin"
+	"github.com/textileio/powergate/v2/api/client"
+	powc "github.com/textileio/powergate/v2/api/client"
+	userPb "github.com/textileio/powergate/v2/api/gen/powergate/user/v1"
+	"github.com/textileio/powergate/v2/ffs"
+	// "github.com/textileio/powergate/v2/api/client/admin"
 	// "google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -126,7 +127,10 @@ func pollStorageDealProgress(ctx context.Context, pgClient *powc.Client, jid ffs
 
 func saveDealsInDB(ctx context.Context, pgClient *powc.Client, ffsToken string, c cid.Cid, storageDealDB dataservice.StorageDealDatabase, assetDB dataservice.AssetDatabase) error {
 	ctx = context.WithValue(ctx, powc.AuthKey, ffsToken)
-	res, err := pgClient.StorageJobs.Executing(ctx)
+	conf := powc.ListConfig{
+		Select: client.Executing,
+	}
+	res, err := pgClient.StorageJobs.List(ctx, conf)
 	if err != nil {
 		return fmt.Errorf("getting executing storage jobs: %s", err)
 	}

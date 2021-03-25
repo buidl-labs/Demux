@@ -11,12 +11,12 @@ import (
 	// "github.com/ipfs/go-cid"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/textileio/powergate/api/client"
+	"github.com/textileio/powergate/v2/api/client"
 
 	// "github.com/textileio/powergate/ffs"
 	// "github.com/textileio/powergate/health"
 	// "google.golang.org/protobuf/encoding/protojson"
-	userPb "github.com/textileio/powergate/api/gen/powergate/user/v1"
+	userPb "github.com/textileio/powergate/v2/api/gen/powergate/user/v1"
 )
 
 // PowergateSetup initializes stuff
