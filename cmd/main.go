@@ -5,11 +5,11 @@ import (
 
 	"github.com/buidl-labs/Demux/dataservice"
 	"github.com/buidl-labs/Demux/server"
-	"github.com/buidl-labs/Demux/util"
+	// "github.com/buidl-labs/Demux/util"
 )
 
 func main() {
 	db := dataservice.InitMongoClient()
-	go util.RunPoller(db)
+	// go util.RunPoller(db)
 	server.StartServer(":" + os.Getenv("PORT"), db)
 }
